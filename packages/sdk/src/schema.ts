@@ -532,10 +532,8 @@ export interface paths {
         query?: {
           from?: string;
           to?: string;
+          staffId?: string;
           status?: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
-        };
-        path: {
-          staffId: components["parameters"]["StaffId"];
         };
       };
       responses: {
@@ -1134,10 +1132,6 @@ export interface components {
       startUtc: string;
     };
     BookingUpdate: {
-      /** Format: date-time */
-      startTime?: string;
-      /** Format: date-time */
-      endTime?: string;
       /** @enum {string} */
       status?: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
       notes?: string;

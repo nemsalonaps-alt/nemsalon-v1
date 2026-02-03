@@ -113,6 +113,30 @@ export async function updateBookingStatus(
   return data ? mapBookingRow(data) : null;
 }
 
+export async function updateBookingFields(input: {
+  bookingId: string;
+  status?: BookingStatus;
+  notes?: string | null;
+}): Promise<Booking | null> {
+  const updates: Record<string, unknown> = {};
+  if (input.status) updates.status = input.status;
+  if (input.notes !== undefined) updates.notes = input.notes;
+
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('bookings')
+    .update(updates)
+    .eq('id', input.bookingId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapBookingRow(data) : null;
+}
+
 export async function updateBookingSchedule(input: {
   bookingId: string;
   staffId: string;

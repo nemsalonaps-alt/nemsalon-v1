@@ -302,7 +302,11 @@ export function registerContentRoutes(app: FastifyInstance) {
       .object({ staffId: z.string().uuid(), timeOffId: z.string().uuid() })
       .parse(request.params);
     const salonId = await authService.requirePrimarySalonId(request);
-    await contentService.deleteStaffTimeOff({ salonId, id: params.timeOffId });
+    await contentService.deleteStaffTimeOff({
+      salonId,
+      staffId: params.staffId,
+      id: params.timeOffId
+    });
     reply.code(204).send();
   });
 
@@ -369,13 +373,10 @@ export function registerContentRoutes(app: FastifyInstance) {
     const body = bookingUpdateSchema.parse(request.body);
     const booking = await contentService.getBooking(params.bookingId);
     await authService.requireSalonRole(request, booking.salonId, ['owner']);
-    let updated = booking;
-    if (body.status) {
-      updated = await contentService.updateBookingStatus(params.bookingId, body.status);
-    }
-    if (body.notes !== undefined) {
-      throw httpError(501, 'BOOKING_UPDATE_NOTES', 'Updating notes is not implemented yet.');
-    }
+    const updated = await contentService.updateBooking(params.bookingId, {
+      status: body.status,
+      notes: body.notes
+    });
     reply.code(200).send(updated);
   });
 

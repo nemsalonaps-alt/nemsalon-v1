@@ -114,6 +114,7 @@ describe('availability slots', () => {
   async function cleanup(seed: SeedResult) {
     const supabase = getSupabaseClient();
     await supabase.from('bookings').delete().eq('salon_id', seed.salonId);
+    await supabase.from('staff_time_off').delete().eq('salon_id', seed.salonId);
     await supabase.from('notification_outbox').delete().eq('salon_id', seed.salonId);
     await supabase.from('staff_services').delete().eq('staff_id', seed.staffId);
     if (seed.extraStaffId) {
@@ -203,6 +204,33 @@ describe('availability slots', () => {
       expect(blocked.statusCode).toBe(400);
       const errorBody = blocked.json() as { message?: string };
       expect(errorBody.message).toBe('error.availability.no_staff_for_service');
+    } finally {
+      await cleanup(seed);
+    }
+  });
+
+  itIfSupabase('filters out staff time off', async () => {
+    const seed = await seedBase();
+    const supabase = getSupabaseClient();
+    try {
+      await supabase.from('staff_time_off').insert({
+        salon_id: seed.salonId,
+        staff_id: seed.staffId,
+        start_time: '2025-01-06T08:00:00.000Z',
+        end_time: '2025-01-06T09:00:00.000Z',
+        reason: 'Personal'
+      });
+
+      const response = await app.inject({
+        method: 'GET',
+        url: `/v1/availability/slots?serviceId=${seed.serviceId}&from=${encodeURIComponent('2025-01-06T07:00:00.000Z')}&days=1&limit=6&intervalMinutes=60`,
+        headers: { 'x-user-id': seed.userId }
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { slots: { startUtc: string }[] };
+      const blocked = body.slots.find((slot) => slot.startUtc === '2025-01-06T08:00:00.000Z');
+      expect(blocked).toBeUndefined();
     } finally {
       await cleanup(seed);
     }

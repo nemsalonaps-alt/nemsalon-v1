@@ -82,13 +82,15 @@ export async function createStaffTimeOff(input: {
 export async function deleteStaffTimeOff(input: {
   id: string;
   salonId: string;
+  staffId: string;
 }): Promise<boolean> {
   const client = getSupabaseClient();
   const { error, count } = await client
     .from('staff_time_off')
     .delete({ count: 'exact' })
     .eq('id', input.id)
-    .eq('salon_id', input.salonId);
+    .eq('salon_id', input.salonId)
+    .eq('staff_id', input.staffId);
 
   if (error) {
     throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });

@@ -12,6 +12,7 @@ import {
   getBookingById,
   getBookingByIdempotencyKey,
   updateBookingStatus as updateBookingStatusRepo,
+  updateBookingFields as updateBookingFieldsRepo,
   updateBookingSchedule as updateBookingScheduleRepo,
   cancelBooking as cancelBookingRepo
 } from '../repo/booking-repo.js';
@@ -415,6 +416,18 @@ export const contentService = {
     return booking;
   },
 
+  async updateBooking(bookingId: string, input: { status?: BookingStatus; notes?: string | null }) {
+    const booking = await updateBookingFieldsRepo({
+      bookingId,
+      status: input.status,
+      notes: input.notes
+    });
+    if (!booking) {
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    return booking;
+  },
+
   async cancelBooking(input: {
     bookingId: string;
     reasonKey?: string;
@@ -545,7 +558,7 @@ export const contentService = {
     return createStaffTimeOff(input);
   },
 
-  async deleteStaffTimeOff(input: { salonId: string; id: string }) {
+  async deleteStaffTimeOff(input: { salonId: string; staffId: string; id: string }) {
     const deleted = await deleteStaffTimeOff(input);
     if (!deleted) {
       throw httpError(404, 'TIME_OFF_NOT_FOUND', 'error.staff.time_off_not_found');

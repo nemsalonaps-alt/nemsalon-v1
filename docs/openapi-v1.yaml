@@ -1250,8 +1250,6 @@ components:
     BookingUpdate:
       type: object
       properties:
-        startTime: { type: string, format: date-time }
-        endTime: { type: string, format: date-time }
         status:
           type: string
           enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
