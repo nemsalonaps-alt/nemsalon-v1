@@ -6,6 +6,15 @@ export type BookingStatus =
   | 'cancelled'
   | 'no_show';
 
+export type Salon = {
+  id: string;
+  name: string;
+  timezone: string;
+  locale: string;
+  currency: string;
+  status?: 'draft' | 'active';
+};
+
 export type Booking = {
   id: string;
   salonId: string;
@@ -34,14 +43,22 @@ export type Service = {
   salonId: string;
   name: string;
   durationMinutes: number;
-  priceAmount: number;
+  bufferMinutes?: number;
+  price: number;
   currency: string;
+};
+
+export type BusinessHoursEntry = {
+  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+  startTime: string;
+  endTime: string;
+  enabled: boolean;
 };
 
 export type StaffProfile = {
   id: string;
   salonId: string;
-  displayName: string;
+  name: string;
   role: 'owner' | 'admin' | 'staff';
   email?: string | null;
   phone?: string | null;
