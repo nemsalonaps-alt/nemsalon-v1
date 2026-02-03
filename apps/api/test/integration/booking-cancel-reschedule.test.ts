@@ -94,7 +94,9 @@ describe('booking cancel + reschedule', () => {
     await supabase.from('customers').insert({
       id: customerId,
       salon_id: salonId,
-      name: 'Test Customer'
+      name: 'Test Customer',
+      email: 'customer.cancel@example.com',
+      phone: '+4512345678'
     });
 
     return { userId: authUser.user.id, salonId, staffId, serviceId, customerId };
@@ -103,6 +105,7 @@ describe('booking cancel + reschedule', () => {
   async function cleanup(seed: SeedResult) {
     const supabase = getSupabaseClient();
     await supabase.from('bookings').delete().eq('salon_id', seed.salonId);
+    await supabase.from('notification_outbox').delete().eq('salon_id', seed.salonId);
     await supabase.from('staff_services').delete().eq('staff_id', seed.staffId);
     await supabase.from('staff_profiles').delete().eq('id', seed.staffId);
     await supabase.from('services').delete().eq('id', seed.serviceId);
@@ -158,6 +161,12 @@ describe('booking cancel + reschedule', () => {
       expect(again.statusCode).toBe(200);
       const againBody = again.json() as { booking: { status: string } };
       expect(againBody.booking.status).toBe('cancelled');
+
+      const { data: outbox } = await supabase
+        .from('notification_outbox')
+        .select('*')
+        .eq('booking_id', booking.id);
+      expect(outbox?.length).toBe(2);
     } finally {
       await cleanup(seed);
     }

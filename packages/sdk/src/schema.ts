@@ -666,6 +666,27 @@ export interface paths {
       };
     };
   };
+  "/v1/notifications/outbox": {
+    /** List notification outbox entries */
+    get: {
+      parameters: {
+        query?: {
+          status?: "pending" | "processing" | "sent" | "failed";
+          limit?: number;
+        };
+      };
+      responses: {
+        /** @description Outbox entries */
+        200: {
+          content: {
+            "application/json": components["schemas"]["OutboxListResponse"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        403: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/devices/register": {
     /** Register device for push notifications */
     post: {
@@ -1047,6 +1068,34 @@ export interface components {
       data?: {
         [key: string]: unknown;
       };
+    };
+    OutboxEntry: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      salonId: string;
+      /** Format: uuid */
+      bookingId?: string | null;
+      type: string;
+      /** @enum {string} */
+      channel: "email" | "sms" | "push";
+      provider: string;
+      recipient: string;
+      payload: {
+        [key: string]: unknown;
+      };
+      /** @enum {string} */
+      status: "pending" | "processing" | "sent" | "failed";
+      dedupeKey?: string | null;
+      attempts: number;
+      /** Format: date-time */
+      nextAttemptAt?: string | null;
+      /** Format: date-time */
+      lockedAt?: string | null;
+      lockedBy?: string | null;
+    };
+    OutboxListResponse: {
+      entries: components["schemas"]["OutboxEntry"][];
     };
     DeviceRegisterRequest: {
       deviceId: string;

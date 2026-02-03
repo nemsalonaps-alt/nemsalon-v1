@@ -19,7 +19,8 @@
     "dev:setup": "pnpm supabase:start && pnpm supabase:migrate && pnpm generate:sdk",
     "dev:api": "pnpm -C apps/api dev",
     "dev:web": "pnpm -C apps/web dev",
-    "dev:mobile": "pnpm -C apps/mobile dev"
+    "dev:mobile": "pnpm -C apps/mobile dev",
+    "dev:worker": "pnpm -C apps/api worker:notifications"
   },
   "devDependencies": {
     "@types/node": "^20.11.30",

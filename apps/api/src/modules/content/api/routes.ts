@@ -226,12 +226,15 @@ export function registerContentRoutes(app: FastifyInstance) {
   app.post('/v1/bookings', async (request, reply) => {
     const body = bookingCreateSchema.parse(request.body);
     const salonId = await authService.requirePrimarySalonId(request);
+    const headerKey = request.headers['idempotency-key'];
+    const idempotencyKey = Array.isArray(headerKey) ? headerKey[0] : headerKey;
     const booking = await contentService.createBooking({
       salonId,
       serviceId: body.serviceId,
       staffId: body.staffId,
       startTime: body.startUtc ?? body.startTime ?? '',
       endTime: body.endUtc ?? body.endTime,
+      idempotencyKey: typeof idempotencyKey === 'string' ? idempotencyKey : undefined,
       notes: body.notes,
       customerId: body.customerId,
       customer: body.customer

@@ -1,4 +1,4 @@
-import { httpError } from '../../../server/http-error.js';
+import { HttpError, httpError } from '../../../server/http-error.js';
 import type {
   Booking,
   BookingStatus,
@@ -10,6 +10,7 @@ import type {
 import {
   createBooking as createBookingRepo,
   getBookingById,
+  getBookingByIdempotencyKey,
   updateBookingStatus as updateBookingStatusRepo,
   updateBookingSchedule as updateBookingScheduleRepo,
   cancelBooking as cancelBookingRepo
@@ -20,6 +21,7 @@ import { createSalon, getSalonById, updateSalonById } from '../repo/salon-repo.j
 import { createService, getServiceById, getServicesByIds } from '../repo/service-repo.js';
 import { addStaffServices, getStaffServiceIds } from '../repo/staff-services-repo.js';
 import { createStaffProfile, getStaffById } from '../repo/staff-repo.js';
+import { notificationsService } from '../../notifications/service/notifications-service.js';
 
 export type CreateBookingInput = {
   salonId: string;
@@ -27,6 +29,7 @@ export type CreateBookingInput = {
   staffId: string;
   startTime: string;
   endTime?: string;
+  idempotencyKey?: string;
   notes?: string;
   customerId?: string;
   customer?: {
@@ -159,6 +162,13 @@ export const contentService = {
   },
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
+    if (input.idempotencyKey) {
+      const existing = await getBookingByIdempotencyKey(input.salonId, input.idempotencyKey);
+      if (existing) {
+        return existing;
+      }
+    }
+
     const start = new Date(input.startTime);
     if (Number.isNaN(start.valueOf())) {
       throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
@@ -238,18 +248,31 @@ export const contentService = {
       throw httpError(500, 'CUSTOMER_RESOLUTION_FAILED', 'Unable to resolve customer.');
     }
 
-    return createBookingRepo({
-      salonId: input.salonId,
-      customerId,
-      staffId: input.staffId,
-      serviceId: input.serviceId,
-      startTime: input.startTime,
-      endTime: computedEnd.toISOString(),
-      status: 'pending',
-      notes: input.notes,
-      totalAmount: service.price,
-      currency: service.currency
-    });
+    try {
+      return await createBookingRepo({
+        salonId: input.salonId,
+        customerId,
+        staffId: input.staffId,
+        serviceId: input.serviceId,
+        startTime: input.startTime,
+        endTime: computedEnd.toISOString(),
+        status: 'pending',
+        idempotencyKey: input.idempotencyKey,
+        notes: input.notes,
+        totalAmount: service.price,
+        currency: service.currency
+      });
+    } catch (error) {
+      if (
+        error instanceof HttpError &&
+        error.code === 'BOOKING_IDEMPOTENCY_CONFLICT' &&
+        input.idempotencyKey
+      ) {
+        const existing = await getBookingByIdempotencyKey(input.salonId, input.idempotencyKey);
+        if (existing) return existing;
+      }
+      throw error;
+    }
   },
 
   async getBooking(bookingId: string): Promise<Booking> {
@@ -290,6 +313,20 @@ export const contentService = {
     });
     if (!updated) {
       throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    const customer = updated.customerId ? await getCustomerById(updated.customerId) : null;
+    if (customer) {
+      await notificationsService.queueBookingCancelled({
+        salonId: updated.salonId,
+        bookingId: updated.id,
+        customerName: customer.name,
+        customerEmail: customer.email,
+        customerPhone: customer.phone,
+        startTime: updated.startTime,
+        endTime: updated.endTime,
+        reasonKey: input.reasonKey,
+        note: input.note
+      });
     }
     return updated;
   },

@@ -3,6 +3,8 @@ import { ZodError } from 'zod';
 export type ErrorResponse = {
   code: string;
   message: string;
+  errorKey: string;
+  messageKey: string;
   details?: Record<string, unknown>;
   traceId: string;
 };
@@ -14,6 +16,8 @@ export function toErrorResponse(error: unknown, traceId: string) {
       body: {
         code: 'VALIDATION_ERROR',
         message: 'error.validation_failed',
+        errorKey: 'error.validation_failed',
+        messageKey: 'error.validation_failed',
         details: error.flatten(),
         traceId
       }
@@ -32,11 +36,14 @@ export function toErrorResponse(error: unknown, traceId: string) {
   const code =
     typeof err?.code === 'string' ? err.code : statusCode >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR';
   const rawMessage = typeof err?.message === 'string' ? err.message : '';
-  const message = isKey(rawMessage) ? rawMessage : `error.${code.toLowerCase()}`;
+  const messageKey = isKey(rawMessage) ? rawMessage : `error.${code.toLowerCase()}`;
+  const message = messageKey;
 
   const body: ErrorResponse = {
     code,
     message,
+    errorKey: messageKey,
+    messageKey,
     traceId
   };
 

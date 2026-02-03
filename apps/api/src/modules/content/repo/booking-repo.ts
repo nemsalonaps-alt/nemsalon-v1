@@ -10,6 +10,7 @@ export type BookingInsert = {
   startTime: string;
   endTime: string;
   status: BookingStatus;
+  idempotencyKey?: string;
   notes?: string | null;
   totalAmount: number;
   currency: string;
@@ -27,6 +28,7 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
       start_time: input.startTime,
       end_time: input.endTime,
       status: input.status,
+      idempotency_key: input.idempotencyKey ?? null,
       notes: input.notes ?? null,
       total_amount: input.totalAmount,
       currency: input.currency
@@ -40,6 +42,13 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
         409,
         'BOOKING_TIME_NOT_AVAILABLE',
         'error.booking.time_not_available'
+      );
+    }
+    if (error.code === '23505') {
+      throw httpError(
+        409,
+        'BOOKING_IDEMPOTENCY_CONFLICT',
+        'error.booking.idempotency_conflict'
       );
     }
     if (error.code === '23503') {
@@ -56,6 +65,27 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
 export async function getBookingById(bookingId: string): Promise<Booking | null> {
   const client = getSupabaseClient();
   const { data, error } = await client.from('bookings').select('*').eq('id', bookingId).maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapBookingRow(data) : null;
+}
+
+export async function getBookingByIdempotencyKey(
+  salonId: string,
+  idempotencyKey: string
+): Promise<Booking | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('bookings')
+    .select('*')
+    .eq('salon_id', salonId)
+    .eq('idempotency_key', idempotencyKey)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
