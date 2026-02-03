@@ -17,6 +17,7 @@ import { Progress } from './components/Progress';
 import { StepLayout } from './components/StepLayout';
 import type { BookingForm, GateState, SalonForm, ServiceForm, StaffForm, StepId, WeeklyHours, DayId } from './types';
 import { copy } from './copy';
+import { supabase } from '../../lib/supabase';
 import {
   addMinutes,
   defaultCurrencyForLocale,
@@ -114,6 +115,7 @@ export function OnboardingFlow() {
   );
 
   useEffect(() => {
+    if (gateState !== 'checking') return;
     let active = true;
     const loadMe = async () => {
       const result = await fetchMe();
@@ -121,6 +123,8 @@ export function OnboardingFlow() {
       if (!result.ok) {
         if (result.status === 401 || result.status === 403) {
           setGateState('needs-login');
+        } else if (result.status === 0 || result.status >= 500) {
+          setGateState('error');
         } else {
           setGateState('needs-onboarding');
         }
@@ -146,6 +150,16 @@ export function OnboardingFlow() {
     loadMe();
     return () => {
       active = false;
+    };
+  }, [gateState]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      setGateState('checking');
+    });
+    return () => {
+      data.subscription.unsubscribe();
     };
   }, []);
 
@@ -303,10 +317,22 @@ export function OnboardingFlow() {
     );
   };
 
-  if (gateState === 'checking' || gateState === 'has-salon' || gateState === 'needs-login') {
+  if (
+    gateState === 'checking' ||
+    gateState === 'has-salon' ||
+    gateState === 'needs-login' ||
+    gateState === 'error'
+  ) {
     return (
       <div className="app">
-        <Gate state={gateState} onRetry={() => setGateState('checking')} />
+        <Gate
+          state={gateState}
+          onRetry={() => setGateState('checking')}
+          onReviewSettings={() => {
+            setStep('salon');
+            setGateState('needs-onboarding');
+          }}
+        />
       </div>
     );
   }

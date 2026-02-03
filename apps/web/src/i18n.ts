@@ -44,12 +44,37 @@ export const copy = {
       primaryAction: 'Go to dashboard',
       secondaryAction: 'Review settings'
     },
+    error: {
+      badge: 'Connection issue',
+      title: 'We could not reach the API',
+      body: 'Check that the API is running and try again.',
+      primaryAction: 'Retry'
+    },
     needsLogin: {
       badge: 'Login required',
       title: 'Sign in to continue',
       body: 'We could not find an active session. Please log in to start onboarding.',
       primaryAction: 'Go to login',
-      secondaryAction: 'Retry'
+      secondaryAction: 'Retry',
+      emailLabel: 'Email',
+      passwordLabel: 'Password',
+      signIn: 'Sign in',
+      signingIn: 'Signing in...',
+      missingFields: 'Enter email and password.',
+      missingConfig: 'Supabase auth is not configured for this environment.'
+    },
+    devHelper: {
+      badge: 'Dev helper',
+      title: 'Local shortcuts',
+      body: 'These tools only appear in development and never run in production.',
+      useBypass: 'Use dev bypass',
+      createUser: 'Create test user',
+      creating: 'Creating...',
+      missingFields: 'Fill email and password first.',
+      missingConfig: 'Supabase config missing in .env.local.',
+      createdNeedsConfirm: 'User created. Confirm the user in Supabase Studio, then sign in.',
+      createdAndSignedIn: 'User created and signed in. Retrying...',
+      bypassNotice: 'Dev bypass requested. Retrying...'
     }
   },
   salon: {

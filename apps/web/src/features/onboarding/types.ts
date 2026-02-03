@@ -1,4 +1,4 @@
-export type GateState = 'checking' | 'needs-onboarding' | 'has-salon' | 'needs-login';
+export type GateState = 'checking' | 'needs-onboarding' | 'has-salon' | 'needs-login' | 'error';
 export type StepId = 'salon' | 'staff' | 'payments' | 'cta';
 export type DayId = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 

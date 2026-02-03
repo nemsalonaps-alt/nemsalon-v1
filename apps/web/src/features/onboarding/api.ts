@@ -1,5 +1,6 @@
 import { copy } from './copy';
 import type { AuthMeResponse, WeeklyHours } from './types';
+import { supabase } from '../../lib/supabase';
 
 const apiBase =
   typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
@@ -13,12 +14,39 @@ const isErrorKey = (value: string) => /^[a-z][a-z0-9_.-]*$/.test(value);
 const formatApiError = (message: string) =>
   isErrorKey(message) ? copy.apiErrors[message] ?? copy.apiErrors.generic : message;
 
+async function getAccessToken(): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) return null;
+  return data.session?.access_token ?? null;
+}
+
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  const token = await getAccessToken();
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+    return headers;
+  }
+
+  if (import.meta.env.DEV && import.meta.env.VITE_DEV_USER_ID) {
+    headers['x-user-id'] = import.meta.env.VITE_DEV_USER_ID;
+    if (import.meta.env.VITE_DEV_USER_EMAIL) {
+      headers['x-user-email'] = import.meta.env.VITE_DEV_USER_EMAIL;
+    }
+  }
+
+  return headers;
+}
+
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<ApiResult<T>> {
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${apiBase}${path}`, {
       ...options,
       headers: {
         'content-type': 'application/json',
+        ...authHeaders,
         ...(options.headers ?? {})
       },
       credentials: 'include'
@@ -31,8 +59,13 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<A
       let message = copy.errors.requestFailed(response.status);
       if (isJson) {
         try {
-          const body = (await response.json()) as { message?: string };
-          if (body?.message) message = formatApiError(body.message);
+          const body = (await response.json()) as {
+            message?: string;
+            errorKey?: string;
+            code?: string;
+          };
+          const key = body?.message ?? body?.errorKey ?? (body?.code ? `error.${body.code.toLowerCase()}` : undefined);
+          if (key) message = formatApiError(key);
         } catch {
           // ignore parse errors
         }
