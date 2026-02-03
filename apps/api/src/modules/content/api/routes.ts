@@ -33,13 +33,6 @@ const bookingCreateSchema = z
   });
 
 export function registerContentRoutes(app: FastifyInstance) {
-  const salonCreateSchema = z.object({
-    name: z.string().min(2).max(120),
-    timezone: z.string().min(2),
-    locale: z.string().min(2),
-    currency: z.string().length(3)
-  });
-
   const salonUpdateSchema = z
     .object({
       name: z.string().min(2).max(120).optional(),
@@ -81,12 +74,6 @@ export function registerContentRoutes(app: FastifyInstance) {
 
   app.get('/v1/salons/:salonId', async (request, reply) => {
     return notImplemented(reply, request, 'Get salon not implemented');
-  });
-
-  app.post('/v1/salons', async (request, reply) => {
-    const body = salonCreateSchema.parse(request.body);
-    const salon = await contentService.createSalon(body);
-    reply.code(201).send(salon);
   });
 
   app.patch('/v1/salons/:salonId', async (request, reply) => {

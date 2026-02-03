@@ -83,10 +83,10 @@ export interface paths {
     /** Get current user */
     get: {
       responses: {
-        /** @description Current user */
+        /** @description Current user with memberships */
         200: {
           content: {
-            "application/json": components["schemas"]["User"];
+            "application/json": components["schemas"]["AuthMeResponse"];
           };
         };
         401: components["responses"]["ErrorResponse"];
@@ -129,6 +129,49 @@ export interface paths {
         200: {
           content: {
             "application/json": components["schemas"]["Salon"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/salons/{salonId}/business-hours": {
+    /** Get salon business hours */
+    get: {
+      parameters: {
+        path: {
+          salonId: components["parameters"]["SalonId"];
+        };
+      };
+      responses: {
+        /** @description Business hours */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BusinessHoursWeekly"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Replace salon business hours */
+    put: {
+      parameters: {
+        path: {
+          salonId: components["parameters"]["SalonId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["BusinessHoursWeekly"];
+        };
+      };
+      responses: {
+        /** @description Updated business hours */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BusinessHoursWeekly"];
           };
         };
         400: components["responses"]["ErrorResponse"];
@@ -248,6 +291,49 @@ export interface paths {
         201: {
           content: {
             "application/json": components["schemas"]["Staff"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/services": {
+    /** List services assigned to staff */
+    get: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      responses: {
+        /** @description Staff services */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffServicesResponse"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Assign services to staff */
+    post: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffServicesAssignRequest"];
+        };
+      };
+      responses: {
+        /** @description Assigned services */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffServicesResponse"];
           };
         };
         400: components["responses"]["ErrorResponse"];
@@ -544,6 +630,43 @@ export interface components {
       /** Format: uuid */
       salonId?: string;
     };
+    AuthUser: {
+      /** Format: uuid */
+      id: string;
+      /** Format: email */
+      email?: string;
+      fullName?: string;
+      phone?: string;
+      /** Format: uuid */
+      primarySalonId?: string;
+    };
+    AuthSalonSummary: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** @enum {string} */
+      status?: "draft" | "active";
+      locale: string;
+      currency: string;
+      timezone: string;
+    };
+    Membership: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      salonId: string;
+      /** @enum {string} */
+      role: "owner" | "admin" | "staff";
+      active: boolean;
+      salon?: components["schemas"]["AuthSalonSummary"];
+    };
+    AuthMeResponse: {
+      user: components["schemas"]["AuthUser"];
+      memberships: components["schemas"]["Membership"][];
+      /** Format: uuid */
+      primarySalonId?: string;
+      salon?: components["schemas"]["AuthSalonSummary"];
+    };
     LoginRequest: {
       /** Format: email */
       email: string;
@@ -564,6 +687,8 @@ export interface components {
       /** Format: uuid */
       id: string;
       name: string;
+      /** @enum {string} */
+      status?: "draft" | "active";
       currency?: string;
       locale?: string;
       timezone?: string;
@@ -578,22 +703,44 @@ export interface components {
       locale?: string;
       timezone?: string;
     };
+    BusinessHoursDay: {
+      /** @enum {string} */
+      day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+      /** @example 09:00 */
+      startTime: string;
+      /** @example 17:00 */
+      endTime: string;
+      enabled: boolean;
+    };
+    BusinessHoursWeekly: {
+      weekly: components["schemas"]["BusinessHoursDay"][];
+    };
+    SalonCreate: {
+      name: string;
+      currency: string;
+      locale: string;
+      timezone: string;
+    };
     Service: {
       /** Format: uuid */
       id: string;
+      /** Format: uuid */
+      salonId: string;
       name: string;
       /** @description Minor units (e.g., øre) */
       price: number;
-      currency?: string;
+      currency: string;
       durationMinutes: number;
+      bufferMinutes?: number;
       active?: boolean;
     };
     ServiceCreate: {
       name: string;
       /** @description Minor units (e.g., øre) */
       price: number;
-      currency?: string;
+      currency: string;
       durationMinutes: number;
+      bufferMinutes?: number;
       active?: boolean;
     };
     ServiceUpdate: {
@@ -602,6 +749,7 @@ export interface components {
       price?: number;
       currency?: string;
       durationMinutes?: number;
+      bufferMinutes?: number;
       active?: boolean;
     };
     ServiceList: {
@@ -610,6 +758,8 @@ export interface components {
     Staff: {
       /** Format: uuid */
       id: string;
+      /** Format: uuid */
+      salonId: string;
       name: string;
       /** @enum {string} */
       role: "owner" | "admin" | "staff";
@@ -620,6 +770,14 @@ export interface components {
       /** @enum {string} */
       role: "owner" | "admin" | "staff";
       active?: boolean;
+    };
+    StaffServicesAssignRequest: {
+      serviceIds: string[];
+    };
+    StaffServicesResponse: {
+      /** Format: uuid */
+      staffId: string;
+      serviceIds: string[];
     };
     StaffList: {
       data: components["schemas"]["Staff"][];

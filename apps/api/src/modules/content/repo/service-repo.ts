@@ -64,6 +64,7 @@ function mapServiceRow(row: Record<string, unknown>): Service {
     durationMinutes: row.duration_minutes as number,
     bufferMinutes: row.buffer_minutes as number | undefined,
     price: Number(row.price_amount),
-    currency: row.currency as string
+    currency: row.currency as string,
+    active: row.active as boolean
   };
 }

@@ -46,6 +46,7 @@ export type Service = {
   bufferMinutes?: number;
   price: number;
   currency: string;
+  active?: boolean;
 };
 
 export type BusinessHoursEntry = {
