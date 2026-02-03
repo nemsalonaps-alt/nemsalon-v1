@@ -10,9 +10,11 @@ import {
   deleteStaffTimeOff,
   fetchAvailability,
   fetchMe,
+  getBooking,
   getBusinessHours,
   getPayment,
   listBookings,
+  listCustomers,
   listServices,
   listStaff,
   listStaffServices,
@@ -23,16 +25,22 @@ import {
   updateService,
   updateStaff
 } from './api';
+import { Gate } from '../onboarding/pages/Gate';
+import type { GateState } from '../onboarding/types';
+import { onAuthStateChange } from '../../lib/auth';
+import { copy } from '../../i18n';
 import type {
   AuthMeResponse,
   BookingSummary,
   BusinessHoursEntry,
+  Customer,
   Service,
   StaffProfile,
   StaffTimeOff
 } from './types';
 
 type TabKey = 'home' | 'calendar' | 'create' | 'details' | 'settings';
+type ConsoleGateState = GateState | 'ready';
 
 const initialHours: BusinessHoursEntry[] = [
   { day: 'mon', startTime: '09:00', endTime: '17:00', enabled: true },
@@ -58,17 +66,29 @@ function formatCurrency(amount: number, currency: string) {
   }
 }
 
+function toUtcIso(date: string, time: string) {
+  const value = new Date(`${date}T${time}:00`);
+  return value.toISOString();
+}
+
 export function OwnerConsole() {
   const [activeTab, setActiveTab] = useState<TabKey>('home');
+  const [gateState, setGateState] = useState<ConsoleGateState>('checking');
   const [me, setMe] = useState<AuthMeResponse | null>(null);
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [services, setServices] = useState<Service[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [businessHours, setBusinessHoursState] = useState<BusinessHoursEntry[]>(initialHours);
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState<string>('');
+  const [bookingLookupId, setBookingLookupId] = useState<string>('');
   const [selectedStaffId, setSelectedStaffId] = useState<string>('');
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [availabilitySlots, setAvailabilitySlots] = useState<Array<{ startUtc: string; endUtc: string; staffId: string }>>([]);
+  const [availabilityDate, setAvailabilityDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [customDate, setCustomDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [customTime, setCustomTime] = useState('09:00');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [customerName, setCustomerName] = useState('Testkunde');
   const [customerEmail, setCustomerEmail] = useState('kunde@example.com');
   const [customerPhone, setCustomerPhone] = useState('+4512345678');
@@ -89,18 +109,28 @@ export function OwnerConsole() {
   const serviceById = useMemo(() => new Map(services.map((entry) => [entry.id, entry])), [services]);
 
   useEffect(() => {
+    if (gateState !== 'checking') return;
     let active = true;
     async function load() {
       const meResult = await fetchMe();
       if (!active) return;
-      if (meResult.ok) {
-        setMe(meResult.data);
+      if (!meResult.ok) {
+        if (meResult.status === 401 || meResult.status === 403) {
+          setGateState('needs-login');
+        } else {
+          setGateState('error');
+        }
+        return;
       }
+      setMe(meResult.data);
+      setGateState('ready');
       const staffResult = await listStaff();
       if (staffResult.ok) setStaff(staffResult.data.data);
       const serviceResult = await listServices();
       if (serviceResult.ok) setServices(serviceResult.data.data);
-      if (meResult.ok && meResult.data.primarySalonId) {
+      const customerResult = await listCustomers();
+      if (customerResult.ok) setCustomers(customerResult.data.data);
+      if (meResult.data.primarySalonId) {
         const hoursResult = await getBusinessHours(meResult.data.primarySalonId);
         if (hoursResult.ok) setBusinessHoursState(hoursResult.data.weekly);
       }
@@ -108,6 +138,15 @@ export function OwnerConsole() {
     load();
     return () => {
       active = false;
+    };
+  }, [gateState]);
+
+  useEffect(() => {
+    const subscription = onAuthStateChange(() => {
+      setGateState('checking');
+    });
+    return () => {
+      subscription?.data.subscription.unsubscribe();
     };
   }, []);
 
@@ -140,6 +179,15 @@ export function OwnerConsole() {
     });
   }, [selectedBookingId, bookings]);
 
+  useEffect(() => {
+    if (!selectedCustomerId) return;
+    const customer = customers.find((entry) => entry.id === selectedCustomerId);
+    if (!customer) return;
+    setCustomerName(customer.name ?? '');
+    setCustomerEmail(customer.email ?? '');
+    setCustomerPhone(customer.phone ?? '');
+  }, [selectedCustomerId, customers]);
+
   async function refreshStaffServices() {
     if (!staffServicesTarget) return;
     const result = await listStaffServices(staffServicesTarget);
@@ -147,14 +195,20 @@ export function OwnerConsole() {
   }
 
   async function handleStaffServiceToggle(serviceId: string) {
-    let next = staffServicesSelection.includes(serviceId)
+    const current = staffServicesSelection;
+    const next = staffServicesSelection.includes(serviceId)
       ? staffServicesSelection.filter((id) => id !== serviceId)
       : [...staffServicesSelection, serviceId];
+    if (next.length === 0) {
+      setStatusMessage(copy.validation.staff.serviceRequired);
+      return;
+    }
     setStaffServicesSelection(next);
     if (staffServicesTarget) {
       const result = await assignStaffServices(staffServicesTarget, next);
       if (!result.ok) {
         setStatusMessage(`Kunne ikke gemme services: ${result.error}`);
+        setStaffServicesSelection(current);
         await refreshStaffServices();
       }
     }
@@ -162,15 +216,22 @@ export function OwnerConsole() {
 
   async function handleCreateBooking(slotStart: string, slotEnd: string, staffId: string) {
     if (!selectedServiceId) return;
+    if (!selectedCustomerId && !customerName.trim()) {
+      setStatusMessage('Tilføj kundeoplysninger eller vælg en kunde.');
+      return;
+    }
     const result = await createBooking({
       staffId,
       serviceId: selectedServiceId,
       startUtc: slotStart,
-      customer: {
-        name: customerName,
-        email: customerEmail,
-        phone: customerPhone
-      }
+      customerId: selectedCustomerId || undefined,
+      customer: selectedCustomerId
+        ? undefined
+        : {
+            name: customerName,
+            email: customerEmail,
+            phone: customerPhone
+          }
     });
     if (!result.ok) {
       setStatusMessage(`Booking fejlede: ${result.error}`);
@@ -178,18 +239,56 @@ export function OwnerConsole() {
     }
     const checkout = await createCheckout(result.data.id);
     if (!checkout.ok) {
-      setStatusMessage(`Checkout fejlede: ${checkout.error}`);
+      const hint =
+        checkout.error.includes('config') || checkout.error.includes('CONFIG')
+          ? ' (mangler betalings-setup eller mock mode)'
+          : '';
+      setStatusMessage(`Checkout fejlede: ${checkout.error}${hint}`);
       return;
     }
     setStatusMessage(`Booking oprettet. Checkout: ${checkout.data.checkoutUrl}`);
   }
 
+  async function handleCustomBooking() {
+    if (!selectedServiceId) {
+      setStatusMessage('Vælg en service først.');
+      return;
+    }
+    if (!selectedStaffId) {
+      setStatusMessage('Vælg en medarbejder til custom tid.');
+      return;
+    }
+    if (!customDate || !customTime) {
+      setStatusMessage('Vælg dato og tidspunkt.');
+      return;
+    }
+    const startUtc = toUtcIso(customDate, customTime);
+    await handleCreateBooking(startUtc, startUtc, selectedStaffId);
+  }
+
+  async function handleLookupBooking() {
+    if (!bookingLookupId.trim()) return;
+    const result = await getBooking(bookingLookupId.trim());
+    if (!result.ok) {
+      setStatusMessage(`Kunne ikke hente booking: ${result.error}`);
+      return;
+    }
+    setBookings((prev) => {
+      const exists = prev.some((entry) => entry.id === result.data.id);
+      return exists ? prev : [result.data, ...prev];
+    });
+    setSelectedBookingId(result.data.id);
+    setActiveTab('details');
+  }
+
   async function loadAvailability(serviceId: string, staffId?: string) {
+    if (!availabilityDate) return;
     const result = await fetchAvailability({
       serviceId,
       staffId,
-      days: 7,
-      limit: 12,
+      fromUtc: toUtcIso(availabilityDate, '00:00'),
+      days: 1,
+      limit: 64,
       intervalMinutes: 15
     });
     if (result.ok) {
@@ -332,6 +431,14 @@ export function OwnerConsole() {
     hours: businessHours.filter((entry) => entry.enabled).length
   };
 
+  if (gateState !== 'ready') {
+    return (
+      <div className="app">
+        <Gate state={gateState} onRetry={() => setGateState('checking')} />
+      </div>
+    );
+  }
+
   return (
     <div className="app console">
       <header className="console-header">
@@ -443,6 +550,21 @@ export function OwnerConsole() {
               </select>
             </label>
             <label className="field">
+              <span className="label">Eksisterende kunde</span>
+              <select
+                className="select"
+                value={selectedCustomerId}
+                onChange={(event) => setSelectedCustomerId(event.target.value)}
+              >
+                <option value="">Ny kunde</option>
+                {customers.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}{entry.email ? ` • ${entry.email}` : ''}{entry.phone ? ` • ${entry.phone}` : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
               <span className="label">Kunde</span>
               <input className="input" value={customerName} onChange={(event) => setCustomerName(event.target.value)} />
             </label>
@@ -453,6 +575,15 @@ export function OwnerConsole() {
             <label className="field">
               <span className="label">Telefon</span>
               <input className="input" value={customerPhone} onChange={(event) => setCustomerPhone(event.target.value)} />
+            </label>
+            <label className="field">
+              <span className="label">Dato (availability)</span>
+              <input
+                className="input"
+                type="date"
+                value={availabilityDate}
+                onChange={(event) => setAvailabilityDate(event.target.value)}
+              />
             </label>
           </div>
           <button
@@ -473,12 +604,42 @@ export function OwnerConsole() {
               </button>
             ))}
           </div>
+          <div className="panel subtle">
+            <h3>Custom tid</h3>
+            <div className="grid three">
+              <label className="field">
+                <span className="label">Dato</span>
+                <input className="input" type="date" value={customDate} onChange={(event) => setCustomDate(event.target.value)} />
+              </label>
+              <label className="field">
+                <span className="label">Tidspunkt</span>
+                <input className="input" type="time" value={customTime} onChange={(event) => setCustomTime(event.target.value)} />
+              </label>
+              <label className="field">
+                <span className="label">Medarbejder</span>
+                <select className="select" value={selectedStaffId} onChange={(event) => setSelectedStaffId(event.target.value)}>
+                  <option value="">Vælg staff</option>
+                  {staff.map((entry) => (
+                    <option key={entry.id} value={entry.id}>{entry.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <button className="btn ghost" onClick={handleCustomBooking}>Opret booking på custom tid</button>
+          </div>
         </section>
       )}
 
       {activeTab === 'details' && (
         <section className="panel">
           <h2>Booking details</h2>
+          <div className="grid two">
+            <label className="field">
+              <span className="label">Find booking by ID</span>
+              <input className="input" value={bookingLookupId} onChange={(event) => setBookingLookupId(event.target.value)} />
+            </label>
+            <button className="btn ghost" onClick={handleLookupBooking}>Hent booking</button>
+          </div>
           <label className="field">
             <span className="label">Booking</span>
             <select className="select" value={selectedBookingId} onChange={(event) => setSelectedBookingId(event.target.value)}>
@@ -695,6 +856,9 @@ export function OwnerConsole() {
             </div>
             <div className="panel subtle">
               <h3>Availability overrides</h3>
+              <p className="muted">
+                Brug dette til ferie, fridage eller andre blokeringer. Overrides skjuler tider i availability.
+              </p>
               <label className="field">
                 <span className="label">Staff</span>
                 <select

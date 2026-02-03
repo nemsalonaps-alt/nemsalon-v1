@@ -28,6 +28,14 @@ export type StaffProfile = {
   phone?: string | null;
 };
 
+export type Customer = {
+  id: string;
+  name: string;
+  email?: string | null;
+  phone?: string | null;
+  notes?: string | null;
+};
+
 export type Service = {
   id: string;
   name: string;

@@ -311,7 +311,14 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.get('/v1/customers', async (request, reply) => {
-    return notImplemented(reply, request, 'List customers not implemented');
+    const salonId = await authService.requirePrimarySalonId(request);
+    const query = z
+      .object({
+        limit: z.coerce.number().int().min(1).max(200).optional()
+      })
+      .parse(request.query);
+    const customers = await contentService.listCustomers({ salonId, limit: query.limit });
+    reply.code(200).send({ data: customers });
   });
 
   app.post('/v1/customers', async (request, reply) => {

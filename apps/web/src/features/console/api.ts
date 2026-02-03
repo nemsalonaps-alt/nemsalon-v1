@@ -1,6 +1,7 @@
 import { getAccessToken } from '../../lib/auth';
 import type {
   AuthMeResponse,
+  Customer,
   StaffProfile,
   Service,
   BookingSummary,
@@ -166,12 +167,17 @@ export async function createBooking(payload: {
   serviceId: string;
   startUtc: string;
   notes?: string;
-  customer: { name: string; email?: string; phone?: string };
+  customerId?: string;
+  customer?: { name: string; email?: string; phone?: string };
 }) {
   return apiRequest<{ id: string }>(`/v1/bookings`, {
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+export async function getBooking(bookingId: string) {
+  return apiRequest<BookingSummary>(`/v1/bookings/${bookingId}`);
 }
 
 export async function cancelBooking(bookingId: string, payload?: { reasonKey?: string; note?: string }) {
@@ -226,6 +232,12 @@ export async function createCheckout(bookingId: string) {
 
 export async function getBusinessHours(salonId: string) {
   return apiRequest<{ weekly: BusinessHoursEntry[] }>(`/v1/salons/${salonId}/business-hours`);
+}
+
+export async function listCustomers(limit = 200) {
+  const query = new URLSearchParams();
+  query.set('limit', String(limit));
+  return apiRequest<{ data: Customer[] }>(`/v1/customers?${query.toString()}`);
 }
 
 export async function setBusinessHours(salonId: string, weekly: BusinessHoursEntry[]) {

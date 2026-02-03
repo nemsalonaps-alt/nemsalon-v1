@@ -58,6 +58,24 @@ export async function getCustomersByIds(customerIds: string[]): Promise<Customer
   return (data ?? []).map(mapCustomerRow);
 }
 
+export async function listCustomersBySalon(input: {
+  salonId: string;
+  limit?: number;
+}): Promise<Customer[]> {
+  const client = getSupabaseClient();
+  let query = client.from('customers').select('*').eq('salon_id', input.salonId).order('name', { ascending: true });
+  if (input.limit) {
+    query = query.limit(input.limit);
+  }
+  const { data, error } = await query;
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapCustomerRow);
+}
+
 function mapCustomerRow(row: Record<string, unknown>): Customer {
   return {
     id: row.id as string,

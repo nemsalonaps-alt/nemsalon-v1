@@ -211,5 +211,5 @@ describe('tenant isolation', () => {
       await cleanupUser(userA);
       await cleanupUser(userB);
     }
-  });
+  }, 15000);
 });

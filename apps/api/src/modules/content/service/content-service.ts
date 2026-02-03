@@ -17,7 +17,12 @@ import {
   cancelBooking as cancelBookingRepo
 } from '../repo/booking-repo.js';
 import { getSalonBusinessHours, replaceSalonBusinessHours } from '../repo/business-hours-repo.js';
-import { createCustomer, getCustomerById, getCustomersByIds } from '../repo/customer-repo.js';
+import {
+  createCustomer,
+  getCustomerById,
+  getCustomersByIds,
+  listCustomersBySalon
+} from '../repo/customer-repo.js';
 import { createSalon, getSalonById, updateSalonById } from '../repo/salon-repo.js';
 import {
   createService,
@@ -78,6 +83,10 @@ export const contentService = {
       throw httpError(404, 'SALON_NOT_FOUND', 'Salon not found.');
     }
     return updateSalonById(salonId, input);
+  },
+
+  async listCustomers(input: { salonId: string; limit?: number }) {
+    return listCustomersBySalon(input);
   },
 
   async setSalonBusinessHours(
@@ -335,12 +344,21 @@ export const contentService = {
     }
   },
 
-  async getBooking(bookingId: string): Promise<Booking> {
+  async getBooking(
+    bookingId: string
+  ): Promise<Booking & { paymentId?: string | null; paymentStatus?: string | null; paymentProvider?: string | null }> {
     const booking = await getBookingById(bookingId);
     if (!booking) {
       throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
     }
-    return booking;
+    const payments = await listPaymentsForBookingIds([booking.id]);
+    const payment = payments[0];
+    return {
+      ...booking,
+      paymentId: payment?.id ?? null,
+      paymentStatus: payment?.status ?? null,
+      paymentProvider: payment?.provider ?? null
+    };
   },
 
   async listBookings(input: {
