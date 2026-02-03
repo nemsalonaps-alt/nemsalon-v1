@@ -16,11 +16,29 @@ import {
   cancelBooking as cancelBookingRepo
 } from '../repo/booking-repo.js';
 import { getSalonBusinessHours, replaceSalonBusinessHours } from '../repo/business-hours-repo.js';
-import { createCustomer, getCustomerById } from '../repo/customer-repo.js';
+import { createCustomer, getCustomerById, getCustomersByIds } from '../repo/customer-repo.js';
 import { createSalon, getSalonById, updateSalonById } from '../repo/salon-repo.js';
-import { createService, getServiceById, getServicesByIds } from '../repo/service-repo.js';
+import {
+  createService,
+  getServiceById,
+  getServicesByIds,
+  listServices as listServicesRepo,
+  updateService as updateServiceRepo
+} from '../repo/service-repo.js';
 import { addStaffServices, getStaffServiceIds } from '../repo/staff-services-repo.js';
-import { createStaffProfile, getStaffById } from '../repo/staff-repo.js';
+import {
+  createStaffProfile,
+  getStaffById,
+  listStaffProfiles,
+  updateStaffProfile
+} from '../repo/staff-repo.js';
+import { listBookings as listBookingsRepo } from '../repo/booking-repo.js';
+import { listPaymentsForBookingIds } from '../../payments/repo/payments-repo.js';
+import {
+  createStaffTimeOff,
+  deleteStaffTimeOff,
+  listStaffTimeOffForSalon
+} from '../repo/staff-time-off-repo.js';
 import { notificationsService } from '../../notifications/service/notifications-service.js';
 
 export type CreateBookingInput = {
@@ -100,6 +118,26 @@ export const contentService = {
     });
   },
 
+  async listStaff(salonId: string): Promise<StaffProfile[]> {
+    return listStaffProfiles(salonId);
+  },
+
+  async updateStaff(input: {
+    salonId: string;
+    staffId: string;
+    name?: string;
+    role?: StaffProfile['role'];
+    active?: boolean;
+    email?: string | null;
+    phone?: string | null;
+  }): Promise<StaffProfile> {
+    const staff = await updateStaffProfile(input);
+    if (!staff) {
+      throw httpError(404, 'STAFF_NOT_FOUND', 'error.staff_not_found');
+    }
+    return staff;
+  },
+
   async createService(input: {
     salonId: string;
     name: string;
@@ -122,6 +160,27 @@ export const contentService = {
       currency: input.currency,
       active: input.active
     });
+  },
+
+  async listServices(salonId: string): Promise<Service[]> {
+    return listServicesRepo(salonId);
+  },
+
+  async updateService(input: {
+    salonId: string;
+    serviceId: string;
+    name?: string;
+    durationMinutes?: number;
+    bufferMinutes?: number;
+    price?: number;
+    currency?: string;
+    active?: boolean;
+  }): Promise<Service> {
+    const service = await updateServiceRepo(input);
+    if (!service) {
+      throw httpError(404, 'SERVICE_NOT_FOUND', 'error.service_not_found');
+    }
+    return service;
   },
 
   async assignStaffServices(input: {
@@ -283,6 +342,71 @@ export const contentService = {
     return booking;
   },
 
+  async listBookings(input: {
+    salonId: string;
+    fromUtc?: string;
+    toUtc?: string;
+    staffId?: string;
+    status?: BookingStatus;
+  }): Promise<
+    Array<
+      Booking & {
+        customerName?: string | null;
+        serviceName?: string | null;
+        staffName?: string | null;
+        paymentStatus?: string | null;
+        paymentId?: string | null;
+      }
+    >
+  > {
+    const bookings = await listBookingsRepo({
+      salonId: input.salonId,
+      fromUtc: input.fromUtc,
+      toUtc: input.toUtc,
+      staffId: input.staffId,
+      status: input.status
+    });
+
+    const customerIds = Array.from(new Set(bookings.map((b) => b.customerId)));
+    const serviceIds = Array.from(new Set(bookings.map((b) => b.serviceId)));
+    const staffIds = Array.from(new Set(bookings.map((b) => b.staffId)));
+
+    const [customers, services, staff, payments] = await Promise.all([
+      getCustomersByIds(customerIds),
+      getServicesByIds(serviceIds),
+      Promise.all(staffIds.map((id) => getStaffById(id))).then((rows) =>
+        rows.filter(Boolean) as StaffProfile[]
+      ),
+      listPaymentsForBookingIds(bookings.map((b) => b.id))
+    ]);
+
+    const customersById = new Map(customers.map((c) => [c.id, c]));
+    const servicesById = new Map(services.map((s) => [s.id, s]));
+    const staffById = new Map(staff.map((s) => [s.id, s]));
+
+    const paymentsByBooking = new Map<string, { status: string; id: string }>();
+    for (const payment of payments) {
+      if (!paymentsByBooking.has(payment.bookingId)) {
+        paymentsByBooking.set(payment.bookingId, { status: payment.status, id: payment.id });
+      }
+    }
+
+    return bookings.map((booking) => {
+      const customer = customersById.get(booking.customerId);
+      const service = servicesById.get(booking.serviceId);
+      const staffMember = staffById.get(booking.staffId);
+      const payment = paymentsByBooking.get(booking.id);
+      return {
+        ...booking,
+        customerName: customer?.name ?? null,
+        serviceName: service?.name ?? null,
+        staffName: staffMember?.name ?? null,
+        paymentStatus: payment?.status ?? null,
+        paymentId: payment?.id ?? null
+      };
+    });
+  },
+
   async updateBookingStatus(bookingId: string, status: BookingStatus): Promise<Booking> {
     const booking = await updateBookingStatusRepo(bookingId, status);
     if (!booking) {
@@ -398,6 +522,35 @@ export const contentService = {
       throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
     }
     return updated;
+  },
+
+  async listStaffTimeOff(input: { salonId: string; staffId?: string }) {
+    return listStaffTimeOffForSalon(input);
+  },
+
+  async createStaffTimeOff(input: {
+    salonId: string;
+    staffId: string;
+    startTime: string;
+    endTime: string;
+    reason?: string | null;
+  }) {
+    const staff = await getStaffById(input.staffId);
+    if (!staff || staff.salonId !== input.salonId) {
+      throw httpError(404, 'STAFF_NOT_FOUND', 'error.staff_not_found');
+    }
+    if (new Date(input.endTime) <= new Date(input.startTime)) {
+      throw httpError(400, 'TIME_RANGE_INVALID', 'error.staff.time_off_invalid');
+    }
+    return createStaffTimeOff(input);
+  },
+
+  async deleteStaffTimeOff(input: { salonId: string; id: string }) {
+    const deleted = await deleteStaffTimeOff(input);
+    if (!deleted) {
+      throw httpError(404, 'TIME_OFF_NOT_FOUND', 'error.staff.time_off_not_found');
+    }
+    return deleted;
   }
 };
 

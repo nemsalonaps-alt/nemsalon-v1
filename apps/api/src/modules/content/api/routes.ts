@@ -55,6 +55,16 @@ export function registerContentRoutes(app: FastifyInstance) {
     active: z.boolean().default(true)
   });
 
+  const staffUpdateSchema = z
+    .object({
+      name: z.string().min(2).max(80).optional(),
+      role: z.enum(['owner', 'admin', 'staff']).optional(),
+      active: z.boolean().optional(),
+      email: z.string().email().optional(),
+      phone: z.string().min(3).optional()
+    })
+    .refine((value) => Object.keys(value).length > 0, { message: 'No updates provided.' });
+
   const serviceCreateSchema = z.object({
     name: z.string().min(2).max(80),
     durationMinutes: z.number().int().min(5).max(480),
@@ -63,6 +73,17 @@ export function registerContentRoutes(app: FastifyInstance) {
     currency: z.string().length(3),
     active: z.boolean().default(true)
   });
+
+  const serviceUpdateSchema = z
+    .object({
+      name: z.string().min(2).max(80).optional(),
+      durationMinutes: z.number().int().min(5).max(480).optional(),
+      bufferMinutes: z.number().int().min(0).max(240).optional(),
+      price: z.number().int().min(1).optional(),
+      currency: z.string().length(3).optional(),
+      active: z.boolean().optional()
+    })
+    .refine((value) => Object.keys(value).length > 0, { message: 'No updates provided.' });
 
   const businessHoursEntrySchema = z.object({
     day: z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']),
@@ -79,6 +100,13 @@ export function registerContentRoutes(app: FastifyInstance) {
     serviceIds: z.array(z.string().uuid()).min(1)
   });
 
+  const bookingListQuerySchema = z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    staffId: z.string().uuid().optional(),
+    status: z.enum(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show']).optional()
+  });
+
   const bookingCancelSchema = z
     .object({
       reasonKey: z.string().min(1).optional(),
@@ -86,9 +114,22 @@ export function registerContentRoutes(app: FastifyInstance) {
     })
     .default({});
 
+  const bookingUpdateSchema = z
+    .object({
+      status: z.enum(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show']).optional(),
+      notes: z.string().optional()
+    })
+    .refine((value) => Object.keys(value).length > 0, { message: 'No updates provided.' });
+
   const bookingRescheduleSchema = z.object({
     staffId: z.string().uuid(),
     startUtc: z.string().datetime()
+  });
+
+  const staffTimeOffSchema = z.object({
+    startUtc: z.string().datetime(),
+    endUtc: z.string().datetime(),
+    reason: z.string().min(1).optional()
   });
 
   app.get('/v1/salons/:salonId', async (request, reply) => {
@@ -138,7 +179,9 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.get('/v1/services', async (request, reply) => {
-    return notImplemented(reply, request, 'List services not implemented');
+    const salonId = await authService.requirePrimarySalonId(request);
+    const services = await contentService.listServices(salonId);
+    reply.code(200).send({ data: services });
   });
 
   app.post('/v1/services', async (request, reply) => {
@@ -161,11 +204,26 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.patch('/v1/services/:serviceId', async (request, reply) => {
-    return notImplemented(reply, request, 'Update service not implemented');
+    const params = z.object({ serviceId: z.string().uuid() }).parse(request.params);
+    const body = serviceUpdateSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const service = await contentService.updateService({
+      salonId,
+      serviceId: params.serviceId,
+      name: body.name,
+      durationMinutes: body.durationMinutes,
+      bufferMinutes: body.bufferMinutes,
+      price: body.price,
+      currency: body.currency,
+      active: body.active
+    });
+    reply.code(200).send(service);
   });
 
   app.get('/v1/staff', async (request, reply) => {
-    return notImplemented(reply, request, 'List staff not implemented');
+    const salonId = await authService.requirePrimarySalonId(request);
+    const staff = await contentService.listStaff(salonId);
+    reply.code(200).send({ data: staff });
   });
 
   app.post('/v1/staff', async (request, reply) => {
@@ -178,6 +236,22 @@ export function registerContentRoutes(app: FastifyInstance) {
       active: body.active ?? true
     });
     reply.code(201).send(staff);
+  });
+
+  app.patch('/v1/staff/:staffId', async (request, reply) => {
+    const params = z.object({ staffId: z.string().uuid() }).parse(request.params);
+    const body = staffUpdateSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const staff = await contentService.updateStaff({
+      salonId,
+      staffId: params.staffId,
+      name: body.name,
+      role: body.role,
+      active: body.active,
+      email: body.email,
+      phone: body.phone
+    });
+    reply.code(200).send(staff);
   });
 
   app.get('/v1/staff/:staffId/services', async (request, reply) => {
@@ -202,6 +276,36 @@ export function registerContentRoutes(app: FastifyInstance) {
     reply.code(200).send(result);
   });
 
+  app.get('/v1/staff/:staffId/time-off', async (request, reply) => {
+    const params = z.object({ staffId: z.string().uuid() }).parse(request.params);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const entries = await contentService.listStaffTimeOff({ salonId, staffId: params.staffId });
+    reply.code(200).send({ data: entries });
+  });
+
+  app.post('/v1/staff/:staffId/time-off', async (request, reply) => {
+    const params = z.object({ staffId: z.string().uuid() }).parse(request.params);
+    const body = staffTimeOffSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const entry = await contentService.createStaffTimeOff({
+      salonId,
+      staffId: params.staffId,
+      startTime: body.startUtc,
+      endTime: body.endUtc,
+      reason: body.reason
+    });
+    reply.code(201).send(entry);
+  });
+
+  app.delete('/v1/staff/:staffId/time-off/:timeOffId', async (request, reply) => {
+    const params = z
+      .object({ staffId: z.string().uuid(), timeOffId: z.string().uuid() })
+      .parse(request.params);
+    const salonId = await authService.requirePrimarySalonId(request);
+    await contentService.deleteStaffTimeOff({ salonId, id: params.timeOffId });
+    reply.code(204).send();
+  });
+
   app.get('/v1/customers', async (request, reply) => {
     return notImplemented(reply, request, 'List customers not implemented');
   });
@@ -219,8 +323,16 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.get('/v1/bookings', async (request, reply) => {
-    await authService.requirePrimarySalonId(request);
-    return notImplemented(reply, request, 'List bookings not implemented');
+    const salonId = await authService.requirePrimarySalonId(request);
+    const query = bookingListQuerySchema.parse(request.query);
+    const bookings = await contentService.listBookings({
+      salonId,
+      fromUtc: query.from,
+      toUtc: query.to,
+      staffId: query.staffId,
+      status: query.status
+    });
+    reply.code(200).send({ data: bookings });
   });
 
   app.post('/v1/bookings', async (request, reply) => {
@@ -253,8 +365,18 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.patch('/v1/bookings/:bookingId', async (request, reply) => {
-    await authService.requirePrimarySalonId(request);
-    return notImplemented(reply, request, 'Update booking not implemented');
+    const params = z.object({ bookingId: z.string().uuid() }).parse(request.params);
+    const body = bookingUpdateSchema.parse(request.body);
+    const booking = await contentService.getBooking(params.bookingId);
+    await authService.requireSalonRole(request, booking.salonId, ['owner']);
+    let updated = booking;
+    if (body.status) {
+      updated = await contentService.updateBookingStatus(params.bookingId, body.status);
+    }
+    if (body.notes !== undefined) {
+      throw httpError(501, 'BOOKING_UPDATE_NOTES', 'Updating notes is not implemented yet.');
+    }
+    reply.code(200).send(updated);
   });
 
   app.post('/v1/bookings/:bookingId/cancel', async (request, reply) => {

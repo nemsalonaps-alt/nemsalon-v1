@@ -46,6 +46,18 @@ export async function getCustomerById(customerId: string): Promise<Customer | nu
   return data ? mapCustomerRow(data) : null;
 }
 
+export async function getCustomersByIds(customerIds: string[]): Promise<Customer[]> {
+  if (customerIds.length === 0) return [];
+  const client = getSupabaseClient();
+  const { data, error } = await client.from('customers').select('*').in('id', customerIds);
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapCustomerRow);
+}
+
 function mapCustomerRow(row: Record<string, unknown>): Customer {
   return {
     id: row.id as string,

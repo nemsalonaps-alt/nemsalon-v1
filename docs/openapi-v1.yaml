@@ -185,9 +185,6 @@ paths:
       tags: [Services]
       summary: List services
       security: [{ bearerAuth: [] }]
-      parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Service list
@@ -259,9 +256,6 @@ paths:
       tags: [Staff]
       summary: List staff
       security: [{ bearerAuth: [] }]
-      parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Staff list
@@ -289,6 +283,88 @@ paths:
                 $ref: '#/components/schemas/Staff'
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}:
+    patch:
+      tags: [Staff]
+      summary: Update staff
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffUpdate'
+      responses:
+        '200':
+          description: Updated staff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/time-off:
+    get:
+      tags: [Staff]
+      summary: List staff time off entries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      responses:
+        '200':
+          description: Time off list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffTimeOffList'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Staff]
+      summary: Create staff time off
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffTimeOffCreate'
+      responses:
+        '201':
+          description: Time off entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffTimeOff'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/time-off/{timeOffId}:
+    delete:
+      tags: [Staff]
+      summary: Delete staff time off entry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - name: timeOffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /v1/staff/{staffId}/services:
     get:
@@ -449,8 +525,26 @@ paths:
       summary: List bookings
       security: [{ bearerAuth: [] }]
       parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: staffId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
       responses:
         '200':
           description: Booking list
@@ -463,6 +557,8 @@ paths:
       tags: [Bookings]
       summary: Create booking
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -524,6 +620,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -742,15 +839,25 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, minLength: 8 }
+      description: Optional idempotency key to safely retry creates.
 
   schemas:
     Error:
       type: object
-      required: [code, message, traceId]
+      required: [code, message, errorKey, messageKey, traceId]
       properties:
         code:
           type: string
         message:
+          type: string
+        errorKey:
+          type: string
+        messageKey:
           type: string
         details:
           type: object
@@ -940,6 +1047,15 @@ components:
         role: { type: string, enum: [owner, admin, staff] }
         active: { type: boolean }
 
+    StaffUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, staff] }
+        active: { type: boolean }
+        email: { type: string }
+        phone: { type: string }
+
     StaffServicesAssignRequest:
       type: object
       required: [serviceIds]
@@ -964,6 +1080,33 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/Staff' }
+
+    StaffTimeOff:
+      type: object
+      required: [id, salonId, staffId, startTime, endTime]
+      properties:
+        id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        reason: { type: string }
+
+    StaffTimeOffCreate:
+      type: object
+      required: [startUtc, endUtc]
+      properties:
+        startUtc: { type: string, format: date-time }
+        endUtc: { type: string, format: date-time }
+        reason: { type: string }
+
+    StaffTimeOffList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/StaffTimeOff' }
 
     Customer:
       type: object
@@ -1046,6 +1189,11 @@ components:
         totalAmount: { type: integer, description: 'Minor units (e.g., øre)' }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         notes: { type: string }
+        customerName: { type: string }
+        staffName: { type: string }
+        serviceName: { type: string }
+        paymentStatus: { type: string, enum: [pending, paid, failed, refunded] }
+        paymentId: { type: string, format: uuid }
 
     BookingCreate:
       type: object

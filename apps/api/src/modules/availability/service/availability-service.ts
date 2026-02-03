@@ -10,6 +10,7 @@ import {
   getStaffServiceIds
 } from '../../content/repo/staff-services-repo.js';
 import { createTimeZoneHelpers, parseTime, type LocalDate } from '../../../shared/timezone.js';
+import { listStaffTimeOff } from '../../content/repo/staff-time-off-repo.js';
 
 type AvailabilityQuery = {
   salonId: string;
@@ -103,12 +104,12 @@ export const availabilityService = {
     }
 
     const endDate = new Date(fromDate.getTime() + days * 24 * 60 * 60 * 1000);
-    const bookings = await getBookingsForStaffInRange(
-      staffIds,
-      fromDate.toISOString(),
-      endDate.toISOString()
-    );
+    const [bookings, timeOff] = await Promise.all([
+      getBookingsForStaffInRange(staffIds, fromDate.toISOString(), endDate.toISOString()),
+      listStaffTimeOff({ staffIds, fromUtc: fromDate.toISOString(), toUtc: endDate.toISOString() })
+    ]);
     const bookingsByStaff = mapBookingsByStaff(bookings);
+    const timeOffByStaff = mapTimeOffByStaff(timeOff);
 
     const helpers = createTimeZoneHelpers(salon.timezone);
     const startLocalDate = helpers.getLocalDateParts(fromDate);
@@ -130,8 +131,10 @@ export const availabilityService = {
         const slotEnd = new Date(slotStart.getTime() + totalDurationMinutes * 60_000);
 
         for (const staffId of staffIds) {
-          const windows = bookingsByStaff.get(staffId) ?? [];
-          if (hasOverlap(slotStart, slotEnd, windows)) continue;
+          const bookingWindows = bookingsByStaff.get(staffId) ?? [];
+          const timeOffWindows = timeOffByStaff.get(staffId) ?? [];
+          if (hasOverlap(slotStart, slotEnd, bookingWindows)) continue;
+          if (hasOverlap(slotStart, slotEnd, timeOffWindows)) continue;
           slots.push({
             startUtc: slotStart.toISOString(),
             endUtc: slotEnd.toISOString(),
@@ -199,6 +202,24 @@ function buildWeeklyMap(weekly: { day: string; startTime: string; endTime: strin
 }
 
 function mapBookingsByStaff(rows: { staffId: string; startTime: string; endTime: string }[]): Map<string, BookingWindow[]> {
+  const map = new Map<string, BookingWindow[]>();
+  for (const row of rows) {
+    const start = new Date(row.startTime);
+    const end = new Date(row.endTime);
+    if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) continue;
+    const list = map.get(row.staffId) ?? [];
+    list.push({ staffId: row.staffId, start, end });
+    map.set(row.staffId, list);
+  }
+  for (const list of map.values()) {
+    list.sort((a, b) => a.start.getTime() - b.start.getTime());
+  }
+  return map;
+}
+
+function mapTimeOffByStaff(
+  rows: { staffId: string; startTime: string; endTime: string }[]
+): Map<string, BookingWindow[]> {
   const map = new Map<string, BookingWindow[]>();
   for (const row of rows) {
     const start = new Date(row.startTime);

@@ -182,12 +182,6 @@ export interface paths {
   "/v1/services": {
     /** List services */
     get: {
-      parameters: {
-        query?: {
-          page?: components["parameters"]["Page"];
-          limit?: components["parameters"]["Limit"];
-        };
-      };
       responses: {
         /** @description Service list */
         200: {
@@ -263,12 +257,6 @@ export interface paths {
   "/v1/staff": {
     /** List staff */
     get: {
-      parameters: {
-        query?: {
-          page?: components["parameters"]["Page"];
-          limit?: components["parameters"]["Limit"];
-        };
-      };
       responses: {
         /** @description Staff list */
         200: {
@@ -295,6 +283,95 @@ export interface paths {
         };
         400: components["responses"]["ErrorResponse"];
         401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}": {
+    /** Update staff */
+    patch: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffUpdate"];
+        };
+      };
+      responses: {
+        /** @description Updated staff */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Staff"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/time-off": {
+    /** List staff time off entries */
+    get: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      responses: {
+        /** @description Time off list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffTimeOffList"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Create staff time off */
+    post: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffTimeOffCreate"];
+        };
+      };
+      responses: {
+        /** @description Time off entry created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["StaffTimeOff"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/time-off/{timeOffId}": {
+    /** Delete staff time off entry */
+    delete: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+          timeOffId: string;
+        };
+      };
+      responses: {
+        /** @description Deleted */
+        204: {
+          content: never;
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
       };
     };
   };
@@ -453,8 +530,12 @@ export interface paths {
     get: {
       parameters: {
         query?: {
-          page?: components["parameters"]["Page"];
-          limit?: components["parameters"]["Limit"];
+          from?: string;
+          to?: string;
+          status?: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
+        };
+        path: {
+          staffId: components["parameters"]["StaffId"];
         };
       };
       responses: {
@@ -469,6 +550,11 @@ export interface paths {
     };
     /** Create booking */
     post: {
+      parameters: {
+        header?: {
+          "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+        };
+      };
       requestBody: {
         content: {
           "application/json": components["schemas"]["BookingCreate"];
@@ -533,6 +619,9 @@ export interface paths {
     /** Create online checkout session for booking */
     post: {
       parameters: {
+        header?: {
+          "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+        };
         path: {
           bookingId: components["parameters"]["BookingId"];
         };
@@ -714,6 +803,8 @@ export interface components {
     Error: {
       code: string;
       message: string;
+      errorKey: string;
+      messageKey: string;
       details?: {
         [key: string]: unknown;
       };
@@ -870,6 +961,14 @@ export interface components {
       role: "owner" | "admin" | "staff";
       active?: boolean;
     };
+    StaffUpdate: {
+      name?: string;
+      /** @enum {string} */
+      role?: "owner" | "admin" | "staff";
+      active?: boolean;
+      email?: string;
+      phone?: string;
+    };
     StaffServicesAssignRequest: {
       serviceIds: string[];
     };
@@ -880,6 +979,29 @@ export interface components {
     };
     StaffList: {
       data: components["schemas"]["Staff"][];
+    };
+    StaffTimeOff: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      salonId: string;
+      /** Format: uuid */
+      staffId: string;
+      /** Format: date-time */
+      startTime: string;
+      /** Format: date-time */
+      endTime: string;
+      reason?: string;
+    };
+    StaffTimeOffCreate: {
+      /** Format: date-time */
+      startUtc: string;
+      /** Format: date-time */
+      endUtc: string;
+      reason?: string;
+    };
+    StaffTimeOffList: {
+      data: components["schemas"]["StaffTimeOff"][];
     };
     Customer: {
       /** Format: uuid */
@@ -957,6 +1079,13 @@ export interface components {
       totalAmount: number;
       currency: string;
       notes?: string;
+      customerName?: string;
+      staffName?: string;
+      serviceName?: string;
+      /** @enum {string} */
+      paymentStatus?: "pending" | "paid" | "failed" | "refunded";
+      /** Format: uuid */
+      paymentId?: string;
     };
     BookingCreate: {
       /** Format: uuid */
@@ -1121,6 +1250,8 @@ export interface components {
     CustomerId: string;
     BookingId: string;
     PaymentId: string;
+    /** @description Optional idempotency key to safely retry creates. */
+    IdempotencyKey?: string;
   };
   requestBodies: never;
   headers: never;

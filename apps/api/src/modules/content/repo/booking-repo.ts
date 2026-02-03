@@ -201,6 +201,41 @@ export async function getBookingsForStaffInRange(
   }));
 }
 
+export async function listBookings(input: {
+  salonId: string;
+  fromUtc?: string;
+  toUtc?: string;
+  staffId?: string;
+  status?: BookingStatus;
+  limit?: number;
+}): Promise<Booking[]> {
+  const client = getSupabaseClient();
+  let query = client.from('bookings').select('*').eq('salon_id', input.salonId);
+
+  if (input.staffId) {
+    query = query.eq('staff_id', input.staffId);
+  }
+  if (input.status) {
+    query = query.eq('status', input.status);
+  }
+  if (input.fromUtc) {
+    query = query.gte('start_time', input.fromUtc);
+  }
+  if (input.toUtc) {
+    query = query.lte('start_time', input.toUtc);
+  }
+
+  const { data, error } = await query
+    .order('start_time', { ascending: true })
+    .limit(input.limit ?? 100);
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapBookingRow);
+}
+
 function mapBookingRow(row: Record<string, unknown>): Booking {
   return {
     id: row.id as string,

@@ -56,6 +56,54 @@ export async function createService(input: {
   return mapServiceRow(data);
 }
 
+export async function listServices(salonId: string): Promise<Service[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('services')
+    .select('*')
+    .eq('salon_id', salonId)
+    .order('name');
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapServiceRow);
+}
+
+export async function updateService(input: {
+  serviceId: string;
+  salonId: string;
+  name?: string;
+  durationMinutes?: number;
+  bufferMinutes?: number;
+  price?: number;
+  currency?: string;
+  active?: boolean;
+}): Promise<Service | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('services')
+    .update({
+      name: input.name,
+      duration_minutes: input.durationMinutes,
+      buffer_minutes: input.bufferMinutes,
+      price_amount: input.price,
+      currency: input.currency,
+      active: input.active
+    })
+    .eq('id', input.serviceId)
+    .eq('salon_id', input.salonId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapServiceRow(data) : null;
+}
+
 function mapServiceRow(row: Record<string, unknown>): Service {
   return {
     id: row.id as string,

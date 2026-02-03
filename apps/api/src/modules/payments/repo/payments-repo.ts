@@ -130,6 +130,22 @@ export async function getPaymentByIdempotencyKey(
   return data ? mapPaymentRow(data) : null;
 }
 
+export async function listPaymentsForBookingIds(bookingIds: string[]): Promise<Payment[]> {
+  if (bookingIds.length === 0) return [];
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('payments')
+    .select('*')
+    .in('booking_id', bookingIds)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapPaymentRow);
+}
+
 function mapPaymentRow(row: Record<string, unknown>): Payment {
   return {
     id: row.id as string,

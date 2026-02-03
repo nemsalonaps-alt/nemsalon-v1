@@ -42,6 +42,52 @@ export async function createStaffProfile(input: {
   return mapStaffRow(data);
 }
 
+export async function listStaffProfiles(salonId: string): Promise<StaffProfile[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('staff_profiles')
+    .select('*')
+    .eq('salon_id', salonId)
+    .order('display_name');
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapStaffRow);
+}
+
+export async function updateStaffProfile(input: {
+  staffId: string;
+  salonId: string;
+  name?: string;
+  role?: StaffProfile['role'];
+  active?: boolean;
+  email?: string | null;
+  phone?: string | null;
+}): Promise<StaffProfile | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('staff_profiles')
+    .update({
+      display_name: input.name,
+      role: input.role,
+      active: input.active,
+      email: input.email,
+      phone: input.phone
+    })
+    .eq('id', input.staffId)
+    .eq('salon_id', input.salonId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapStaffRow(data) : null;
+}
+
 function mapStaffRow(row: Record<string, unknown>): StaffProfile {
   return {
     id: row.id as string,
