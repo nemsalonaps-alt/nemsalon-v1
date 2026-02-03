@@ -402,6 +402,47 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /v1/availability/slots:
+    get:
+      tags: [Availability]
+      summary: List available booking slots
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: serviceId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 30 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: staffId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: intervalMinutes
+          in: query
+          required: false
+          schema: { type: integer, minimum: 5, maximum: 60 }
+      responses:
+        '200':
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /v1/bookings:
     get:
       tags: [Bookings]
@@ -882,6 +923,35 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/Customer' }
+
+    AvailabilitySlot:
+      type: object
+      required: [startUtc, endUtc, staffId]
+      properties:
+        startUtc: { type: string, format: date-time }
+        endUtc: { type: string, format: date-time }
+        staffId: { type: string, format: uuid }
+
+    AvailabilityMeta:
+      type: object
+      required: [fromUtc, days, intervalMinutes, serviceId, timezone]
+      properties:
+        fromUtc: { type: string, format: date-time }
+        days: { type: integer }
+        intervalMinutes: { type: integer }
+        serviceId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        timezone: { type: string }
+
+    AvailabilityResponse:
+      type: object
+      required: [slots, meta]
+      properties:
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilitySlot' }
+        meta:
+          $ref: '#/components/schemas/AvailabilityMeta'
 
     Booking:
       type: object

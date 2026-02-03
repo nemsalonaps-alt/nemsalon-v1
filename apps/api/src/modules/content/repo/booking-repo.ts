@@ -79,6 +79,32 @@ export async function updateBookingStatus(
   return data ? mapBookingRow(data) : null;
 }
 
+export async function getBookingsForStaffInRange(
+  staffIds: string[],
+  fromUtc: string,
+  toUtc: string
+): Promise<{ staffId: string; startTime: string; endTime: string }[]> {
+  if (staffIds.length === 0) return [];
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('bookings')
+    .select('staff_id, start_time, end_time, status')
+    .in('staff_id', staffIds)
+    .lt('start_time', toUtc)
+    .gt('end_time', fromUtc)
+    .in('status', ['pending', 'confirmed', 'in_progress']);
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map((row) => ({
+    staffId: row.staff_id as string,
+    startTime: row.start_time as string,
+    endTime: row.end_time as string
+  }));
+}
+
 function mapBookingRow(row: Record<string, unknown>): Booking {
   return {
     id: row.id as string,

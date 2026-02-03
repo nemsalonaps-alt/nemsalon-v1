@@ -422,6 +422,32 @@ export interface paths {
       };
     };
   };
+  "/v1/availability/slots": {
+    /** List available booking slots */
+    get: {
+      parameters: {
+        query: {
+          serviceId: string;
+          from?: string;
+          days?: number;
+          limit?: number;
+          staffId?: string;
+          intervalMinutes?: number;
+        };
+      };
+      responses: {
+        /** @description Available slots */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AvailabilityResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/bookings": {
     /** List bookings */
     get: {
@@ -807,6 +833,29 @@ export interface components {
     };
     CustomerList: {
       data: components["schemas"]["Customer"][];
+    };
+    AvailabilitySlot: {
+      /** Format: date-time */
+      startUtc: string;
+      /** Format: date-time */
+      endUtc: string;
+      /** Format: uuid */
+      staffId: string;
+    };
+    AvailabilityMeta: {
+      /** Format: date-time */
+      fromUtc: string;
+      days: number;
+      intervalMinutes: number;
+      /** Format: uuid */
+      serviceId: string;
+      /** Format: uuid */
+      staffId?: string;
+      timezone: string;
+    };
+    AvailabilityResponse: {
+      slots: components["schemas"]["AvailabilitySlot"][];
+      meta: components["schemas"]["AvailabilityMeta"];
     };
     Booking: {
       /** Format: uuid */
