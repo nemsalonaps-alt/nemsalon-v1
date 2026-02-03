@@ -154,6 +154,44 @@ describe('booking creation', () => {
     }
   });
 
+  itIfSupabase('returns the same booking for idempotency key', async () => {
+    const seed = await seedBase();
+    const startUtc = '2025-01-06T08:00:00.000Z';
+    const idempotencyKey = `idempo-${randomUUID()}`;
+    try {
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId, 'idempotency-key': idempotencyKey },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
+      });
+      expect(first.statusCode).toBe(201);
+      const firstBooking = first.json() as { id: string };
+
+      const second = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId, 'idempotency-key': idempotencyKey },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
+      });
+      expect(second.statusCode).toBe(201);
+      const secondBooking = second.json() as { id: string };
+      expect(secondBooking.id).toBe(firstBooking.id);
+    } finally {
+      await cleanup(seed);
+    }
+  });
+
   itIfSupabase('rejects overlapping bookings', async () => {
     const seed = await seedBase();
     const startUtc = '2025-01-06T08:00:00.000Z';
