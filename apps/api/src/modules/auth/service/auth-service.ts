@@ -29,8 +29,13 @@ export const authService = {
       };
     }
 
+    const devBypassEnabled = env.DEV_AUTH_BYPASS === 'true';
+    if (env.NODE_ENV === 'production' && devBypassEnabled) {
+      throw httpError(500, 'CONFIG_ERROR', 'DEV_AUTH_BYPASS is not allowed in production.');
+    }
+
     const devUserId = request.headers['x-user-id'];
-    if (env.NODE_ENV !== 'production' && typeof devUserId === 'string' && devUserId.length > 0) {
+    if (devBypassEnabled && typeof devUserId === 'string' && devUserId.length > 0) {
       return {
         user: {
           id: devUserId,

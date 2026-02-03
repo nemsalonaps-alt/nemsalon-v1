@@ -1,3 +1,4 @@
+import './env-loader.js';
 import { buildApp } from './server/build-app.js';
 
 const app = buildApp();

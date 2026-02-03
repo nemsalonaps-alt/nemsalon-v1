@@ -842,8 +842,11 @@ export interface components {
       serviceId: string;
       /** Format: date-time */
       startTime: string;
-      /** Format: date-time */
-      endTime: string;
+      /**
+       * Format: date-time
+       * @description Optional; server validates or computes endTime based on service duration.
+       */
+      endTime?: string;
       notes?: string;
     };
     BookingUpdate: {
@@ -865,6 +868,8 @@ export interface components {
       successUrl: string;
       /** Format: uri */
       cancelUrl: string;
+      /** @description Optional idempotency key for checkout creation. */
+      idempotencyKey?: string;
     };
     BookingCheckoutResponse: {
       /** Format: uri */

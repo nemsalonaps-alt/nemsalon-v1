@@ -903,7 +903,7 @@ components:
 
     BookingCreate:
       type: object
-      required: [salonId, staffId, serviceId, startTime, endTime]
+      required: [salonId, staffId, serviceId, startTime]
       properties:
         salonId: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
@@ -911,7 +911,10 @@ components:
         staffId: { type: string, format: uuid }
         serviceId: { type: string, format: uuid }
         startTime: { type: string, format: date-time }
-        endTime: { type: string, format: date-time }
+        endTime:
+          type: string
+          format: date-time
+          description: Optional; server validates or computes endTime based on service duration.
         notes: { type: string }
       oneOf:
         - required: [customerId]
@@ -942,6 +945,10 @@ components:
         provider: { type: string, enum: [stripe, mobilepay] }
         successUrl: { type: string, format: uri }
         cancelUrl: { type: string, format: uri }
+        idempotencyKey:
+          type: string
+          minLength: 8
+          description: Optional idempotency key for checkout creation.
 
     BookingCheckoutResponse:
       type: object

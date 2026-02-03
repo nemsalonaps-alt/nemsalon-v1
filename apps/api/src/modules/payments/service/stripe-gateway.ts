@@ -51,6 +51,12 @@ export async function createStripeCheckout(input: {
   return { checkoutUrl: session.url, providerReference: session.id };
 }
 
+export async function getStripeCheckoutUrl(sessionId: string): Promise<string | null> {
+  const stripe = getStripeClient();
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  return session?.url ?? null;
+}
+
 export function constructStripeEvent(rawBody: string, signature: string): Stripe.Event {
   const stripe = getStripeClient();
   return stripe.webhooks.constructEvent(rawBody, signature, env.STRIPE_WEBHOOK_SECRET!);

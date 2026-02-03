@@ -8,6 +8,7 @@ export type PaymentInsert = {
   amount: number;
   currency: string;
   status: PaymentStatus;
+  idempotencyKey?: string;
 };
 
 export async function createPayment(input: PaymentInsert): Promise<Payment> {
@@ -19,12 +20,16 @@ export async function createPayment(input: PaymentInsert): Promise<Payment> {
       provider: input.provider,
       amount: input.amount,
       currency: input.currency,
-      status: input.status
+      status: input.status,
+      idempotency_key: input.idempotencyKey ?? null
     })
     .select('*')
     .single();
 
   if (error) {
+    if (error.code === '23505') {
+      throw httpError(409, 'PAYMENT_EXISTS', 'Payment already exists for booking.');
+    }
     throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
   }
 
@@ -78,6 +83,45 @@ export async function markPaymentPaid(
 export async function getPaymentById(paymentId: string): Promise<Payment | null> {
   const client = getSupabaseClient();
   const { data, error } = await client.from('payments').select('*').eq('id', paymentId).maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapPaymentRow(data) : null;
+}
+
+export async function getActivePaymentForBooking(bookingId: string): Promise<Payment | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('payments')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .in('status', ['pending', 'paid'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapPaymentRow(data) : null;
+}
+
+export async function getPaymentByIdempotencyKey(
+  bookingId: string,
+  idempotencyKey: string
+): Promise<Payment | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('payments')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .eq('idempotency_key', idempotencyKey)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
 
   if (error) {
     throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });

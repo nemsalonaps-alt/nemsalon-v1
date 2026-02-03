@@ -1,17 +1,27 @@
 import { env } from '../../../config/env.js';
 import { providers, type PaymentProvider } from '../../../config/providers.js';
-import { httpError } from '../../../server/http-error.js';
+import { HttpError, httpError } from '../../../server/http-error.js';
 import { getBookingById, updateBookingStatus } from '../../content/repo/booking-repo.js';
 import { getCustomerById } from '../../content/repo/customer-repo.js';
 import { notificationsService } from '../../notifications/service/notifications-service.js';
-import { createPayment, getPaymentById, markPaymentPaid, updatePaymentProviderReference } from '../repo/payments-repo.js';
-import { constructStripeEvent, createStripeCheckout } from './stripe-gateway.js';
+import {
+  createPayment,
+  getActivePaymentForBooking,
+  getPaymentById,
+  getPaymentByIdempotencyKey,
+  markPaymentPaid,
+  updatePaymentProviderReference
+} from '../repo/payments-repo.js';
+import { constructStripeEvent, createStripeCheckout, getStripeCheckoutUrl } from './stripe-gateway.js';
 
 export type CheckoutInput = {
   bookingId: string;
   provider?: PaymentProvider;
   successUrl: string;
   cancelUrl: string;
+  salonId?: string;
+  userId?: string;
+  idempotencyKey?: string;
 };
 
 export type CheckoutResult = {
@@ -27,6 +37,10 @@ export const paymentsService = {
       throw httpError(404, 'BOOKING_NOT_FOUND', 'Booking not found.');
     }
 
+    if (input.salonId && booking.salonId !== input.salonId) {
+      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this booking.');
+    }
+
     if (booking.status !== 'pending') {
       throw httpError(409, 'BOOKING_NOT_PENDING', 'Booking is not in a payable state.');
     }
@@ -36,13 +50,53 @@ export const paymentsService = {
       throw httpError(501, 'MOBILEPAY_NOT_IMPLEMENTED', 'MobilePay checkout is not implemented yet.');
     }
 
-    const payment = await createPayment({
-      bookingId: booking.id,
-      provider: 'stripe',
-      amount: booking.totalAmount,
-      currency: booking.currency,
-      status: 'pending'
-    });
+    const resolvedIdempotencyKey =
+      input.idempotencyKey ?? (input.userId ? `${booking.id}:${input.userId}` : undefined);
+
+    const existingByKey = resolvedIdempotencyKey
+      ? await getPaymentByIdempotencyKey(booking.id, resolvedIdempotencyKey)
+      : null;
+    const existing = existingByKey ?? (await getActivePaymentForBooking(booking.id));
+
+    if (existing) {
+      if (existing.status === 'paid') {
+        throw httpError(409, 'PAYMENT_ALREADY_PAID', 'Booking is already paid.');
+      }
+      const checkoutUrl = await resolveCheckoutUrl(existing, booking, input);
+      return {
+        checkoutUrl,
+        paymentId: existing.id,
+        provider: existing.provider
+      };
+    }
+
+    let payment = null;
+    try {
+      payment = await createPayment({
+        bookingId: booking.id,
+        provider: 'stripe',
+        amount: booking.totalAmount,
+        currency: booking.currency,
+        status: 'pending',
+        idempotencyKey: resolvedIdempotencyKey
+      });
+    } catch (error) {
+      if (error instanceof HttpError && error.code === 'PAYMENT_EXISTS') {
+        const fallback = await getActivePaymentForBooking(booking.id);
+        if (fallback) {
+          if (fallback.status === 'paid') {
+            throw httpError(409, 'PAYMENT_ALREADY_PAID', 'Booking is already paid.');
+          }
+          const checkoutUrl = await resolveCheckoutUrl(fallback, booking, input);
+          return {
+            checkoutUrl,
+            paymentId: fallback.id,
+            provider: fallback.provider
+          };
+        }
+      }
+      throw error;
+    }
 
     let checkoutUrl = '';
     let providerReference = '';
@@ -185,3 +239,37 @@ export const paymentsService = {
     return { received: true, idempotent: !paid };
   }
 };
+
+async function resolveCheckoutUrl(
+  payment: { id: string; provider: PaymentProvider; providerReference?: string | null },
+  booking: { id: string; totalAmount: number; currency: string },
+  input: CheckoutInput
+): Promise<string> {
+  if (env.PAYMENTS_USE_MOCK === 'true') {
+    return `https://checkout.mock/${payment.id}`;
+  }
+
+  if (payment.provider !== 'stripe') {
+    throw httpError(501, 'PAYMENT_PROVIDER_NOT_SUPPORTED', 'Payment provider not supported.');
+  }
+
+  providers.payments.stripe.requireConfig();
+
+  if (payment.providerReference) {
+    const existingUrl = await getStripeCheckoutUrl(payment.providerReference);
+    if (existingUrl) {
+      return existingUrl;
+    }
+  }
+
+  const checkout = await createStripeCheckout({
+    bookingId: booking.id,
+    paymentId: payment.id,
+    amount: booking.totalAmount,
+    currency: booking.currency,
+    successUrl: input.successUrl,
+    cancelUrl: input.cancelUrl
+  });
+  await updatePaymentProviderReference(payment.id, checkout.providerReference);
+  return checkout.checkoutUrl;
+}

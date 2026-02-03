@@ -19,7 +19,11 @@ const envSchema = z.object({
   MOBILEPAY_CLIENT_SECRET: z.string().optional(),
   MOBILEPAY_SUBSCRIPTION_KEY: z.string().optional(),
   MOBILEPAY_WEBHOOK_SECRET: z.string().optional(),
-  PAYMENTS_USE_MOCK: z.string().optional()
+  PAYMENTS_USE_MOCK: z.string().optional(),
+  DEV_AUTH_BYPASS: z.string().optional(),
+  CORS_ORIGINS: z.string().optional(),
+  RATE_LIMIT_MAX: z.coerce.number().optional(),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().optional()
 });
 
 export type Env = z.infer<typeof envSchema>;

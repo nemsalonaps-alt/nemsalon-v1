@@ -11,7 +11,7 @@ const bookingCreateSchema = z
     serviceId: z.string().uuid(),
     staffId: z.string().uuid(),
     startTime: z.string().datetime(),
-    endTime: z.string().datetime(),
+    endTime: z.string().datetime().optional(),
     notes: z.string().optional(),
     customerId: z.string().uuid().optional(),
     customer: z
@@ -200,22 +200,32 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.get('/v1/bookings', async (request, reply) => {
+    await authService.requirePrimarySalonId(request);
     return notImplemented(reply, request, 'List bookings not implemented');
   });
 
   app.post('/v1/bookings', async (request, reply) => {
     const body = bookingCreateSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    if (body.salonId !== salonId) {
+      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this salon.');
+    }
     const booking = await contentService.createBooking(body);
     reply.code(201).send(booking);
   });
 
   app.get('/v1/bookings/:bookingId', async (request, reply) => {
     const params = z.object({ bookingId: z.string().uuid() }).parse(request.params);
+    const salonId = await authService.requirePrimarySalonId(request);
     const booking = await contentService.getBooking(params.bookingId);
+    if (booking.salonId !== salonId) {
+      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this booking.');
+    }
     reply.code(200).send(booking);
   });
 
   app.patch('/v1/bookings/:bookingId', async (request, reply) => {
+    await authService.requirePrimarySalonId(request);
     return notImplemented(reply, request, 'Update booking not implemented');
   });
 }

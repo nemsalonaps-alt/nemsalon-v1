@@ -24,7 +24,7 @@ export type CreateBookingInput = {
   serviceId: string;
   staffId: string;
   startTime: string;
-  endTime: string;
+  endTime?: string;
   notes?: string;
   customerId?: string;
   customer?: {
@@ -158,12 +158,8 @@ export const contentService = {
 
   async createBooking(input: CreateBookingInput): Promise<Booking> {
     const start = new Date(input.startTime);
-    const end = new Date(input.endTime);
-    if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) {
-      throw httpError(400, 'INVALID_TIME_FORMAT', 'startTime or endTime is invalid.');
-    }
-    if (start >= end) {
-      throw httpError(400, 'INVALID_TIME_RANGE', 'endTime must be after startTime.');
+    if (Number.isNaN(start.valueOf())) {
+      throw httpError(400, 'INVALID_TIME_FORMAT', 'startTime is invalid.');
     }
 
     const service = await getServiceById(input.serviceId);
@@ -180,6 +176,24 @@ export const contentService = {
     }
     if (staff.salonId !== input.salonId) {
       throw httpError(400, 'STAFF_SALON_MISMATCH', 'Staff member does not belong to this salon.');
+    }
+
+    const staffServiceIds = await getStaffServiceIds(input.staffId);
+    if (!staffServiceIds.includes(input.serviceId)) {
+      throw httpError(400, 'STAFF_SERVICE_MISMATCH', 'Staff member cannot perform this service.');
+    }
+
+    const serviceDuration = service.durationMinutes + (service.bufferMinutes ?? 0);
+    const computedEnd = new Date(start.getTime() + serviceDuration * 60_000);
+    if (input.endTime) {
+      const providedEnd = new Date(input.endTime);
+      if (Number.isNaN(providedEnd.valueOf())) {
+        throw httpError(400, 'INVALID_TIME_FORMAT', 'endTime is invalid.');
+      }
+      const diff = Math.abs(providedEnd.getTime() - computedEnd.getTime());
+      if (diff > 60_000) {
+        throw httpError(400, 'END_TIME_MISMATCH', 'endTime must match service duration.');
+      }
     }
 
     let customerId = input.customerId;
@@ -214,7 +228,7 @@ export const contentService = {
       staffId: input.staffId,
       serviceId: input.serviceId,
       startTime: input.startTime,
-      endTime: input.endTime,
+      endTime: computedEnd.toISOString(),
       status: 'pending',
       notes: input.notes,
       totalAmount: service.price,

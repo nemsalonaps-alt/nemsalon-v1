@@ -270,6 +270,10 @@ create table if not exists payments (
   unique (provider, provider_reference)
 );
 
+create unique index if not exists payments_active_booking_idx
+  on payments (booking_id)
+  where status in ('pending', 'paid');
+
 do $$ begin
   if not exists (select 1 from pg_type where typname = 'notification_channel') then
     create type notification_channel as enum ('email', 'sms', 'push');
