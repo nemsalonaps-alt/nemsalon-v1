@@ -123,7 +123,7 @@ POS, marketing, loyalty, multi-lokation = senere
 Goal: fast first booking with minimal setup. Two required steps, one optional, then CTA.
 
 Entry gate
-- If GET /v1/me returns membership + salon, skip onboarding and go to dashboard.
+- If GET /v1/auth/me returns membership + salon, skip onboarding and go to dashboard.
 - Else start onboarding.
 
 Step 1: Salon setup (required)
@@ -131,9 +131,9 @@ Step 1: Salon setup (required)
 - Defaults: timezone from browser, locale from browser (en/da), currency default DKK for da-DK else EUR (or choose).
 - Validation: name 2-60 chars; timezone IANA; locale string; currency ISO-4217; business hours start < end, at least 1 day.
 - API:
-  - POST /v1/salons { name, timezone, locale, currency }
+  - /v1/auth/me provisions a draft salon for the user (primary salon).
   - PATCH /v1/salons/{id} { name?, timezone?, locale?, currency? }
-  - TODO later: PUT /v1/salons/{id}/business-hours { weekly: [{ day, start, end }] }
+  - PUT /v1/salons/{id}/business-hours { weekly: [{ day, startTime, endTime, enabled }] }
 
 Step 2: Staff + services (required)
 - UI: two cards on one screen.
@@ -142,10 +142,10 @@ Step 2: Staff + services (required)
 - Assign staff to service (checkbox default on). Require at least 1 staff + 1 service.
 - Validation: name 2-60 chars; role enum; duration 5-480; price integer minor units; buffer from allowed list.
 - API:
-  - POST /v1/staff { salonId, name, role }
-  - POST /v1/services { salonId, name, durationMinutes, priceAmount, currency, bufferMinutes? }
+  - POST /v1/staff { name, role } (salon derived from auth context)
+  - POST /v1/services { name, durationMinutes, price, currency, bufferMinutes? }
+  - POST /v1/staff/{staffId}/services { serviceIds: [] }
   - TODO later: PUT /v1/staff/{staffId}/working-hours (only if custom)
-  - TODO later: POST /v1/staff/{staffId}/services { serviceId } or { serviceIds: [] }
 
 Optional Step 3: Payments setup (optional)
 - UI: toggle "Enable online payments now?"
