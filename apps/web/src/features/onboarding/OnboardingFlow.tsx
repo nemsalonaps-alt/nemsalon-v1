@@ -6,6 +6,7 @@ import {
   createStaff,
   createService,
   assignStaffServices,
+  fetchAvailabilitySlots,
   createBooking,
   createCheckout
 } from './api';
@@ -15,7 +16,17 @@ import { SetupStep } from './pages/SetupStep';
 import { FirstBookingCTA } from './components/FirstBookingCTA';
 import { Progress } from './components/Progress';
 import { StepLayout } from './components/StepLayout';
-import type { BookingForm, GateState, SalonForm, ServiceForm, StaffForm, StepId, WeeklyHours, DayId } from './types';
+import type {
+  BookingForm,
+  GateState,
+  SalonForm,
+  ServiceForm,
+  StaffForm,
+  StepId,
+  WeeklyHours,
+  DayId,
+  AvailabilitySlot
+} from './types';
 import { copy } from './copy';
 import { supabase } from '../../lib/supabase';
 import {
@@ -87,6 +98,9 @@ export function OnboardingFlow() {
   const [bookingSaving, setBookingSaving] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const smsAvailable = false;
+  const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
+  const [availabilityError, setAvailabilityError] = useState('');
 
   const steps = useMemo(
     () => [
@@ -163,11 +177,74 @@ export function OnboardingFlow() {
     };
   }, []);
 
+  useEffect(() => {
+    if (step !== 'cta' || !serviceId) return;
+    let active = true;
+    setAvailabilityLoading(true);
+    setAvailabilityError('');
+    fetchAvailabilitySlots({
+      serviceId,
+      staffId: staffId ?? undefined,
+      days: 7,
+      limit: 20,
+      intervalMinutes: 15
+    }).then((result) => {
+      if (!active) return;
+      setAvailabilityLoading(false);
+      if (!result.ok) {
+        setAvailabilityError(result.error);
+        setAvailabilitySlots([]);
+        return;
+      }
+      setAvailabilitySlots(result.data.slots);
+    });
+    return () => {
+      active = false;
+    };
+  }, [step, serviceId, staffId, salon.timezone]);
+
   const computedEndTime = useMemo(() => {
     const durationValue = Number(service.durationMinutes);
     if (Number.isNaN(durationValue)) return '';
     return addMinutes(booking.time, durationValue + service.bufferMinutes);
   }, [booking.time, service.durationMinutes, service.bufferMinutes]);
+
+  const slotOptions = useMemo(() => {
+    const labelFormatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: salon.timezone,
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    });
+    return availabilitySlots.map((slot) => ({
+      ...slot,
+      label: labelFormatter.format(new Date(slot.startUtc))
+    }));
+  }, [availabilitySlots, salon.timezone]);
+
+  const applySlot = (slot: AvailabilitySlot) => {
+    const dateValue = new Intl.DateTimeFormat('en-CA', {
+      timeZone: salon.timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(new Date(slot.startUtc));
+    const timeValue = new Intl.DateTimeFormat('en-GB', {
+      timeZone: salon.timezone,
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(new Date(slot.startUtc));
+    setBooking((prev) => ({ ...prev, date: dateValue, time: timeValue }));
+    setBookingErrors({});
+    setBookingError('');
+    if (staffId !== slot.staffId) {
+      setStaffId(slot.staffId);
+    }
+  };
 
   const updateHours = (
     setter: (value: WeeklyHours[]) => void,
@@ -446,6 +523,10 @@ export function OnboardingFlow() {
               bookingSaving={bookingSaving}
               checkoutUrl={checkoutUrl}
               smsAvailable={smsAvailable}
+              slots={slotOptions}
+              slotsLoading={availabilityLoading}
+              slotsError={availabilityError}
+              onPickSlot={applySlot}
               onBookingChange={(patch) => setBooking((prev) => ({ ...prev, ...patch }))}
               onCreateBooking={handleCreateBooking}
               onBack={() => setStep('payments')}

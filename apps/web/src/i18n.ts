@@ -153,6 +153,13 @@ export const copy = {
     body: 'Everything is ready. Book the first appointment in minutes.',
     assignBanner: 'Assign the service to a staff member to unlock bookings.',
     fixAssignments: 'Fix assignments',
+    slots: {
+      badge: 'Availability',
+      title: 'Suggested slots',
+      body: 'Quick picks based on business hours, assignments, and bookings.',
+      loading: 'Finding available times...',
+      empty: 'No open slots found in the current window.'
+    },
     heroTitle: 'Instant booking wizard',
     heroNote: 'Start time + duration + buffer will auto-calc end time and availability.',
     fields: {
@@ -241,7 +248,10 @@ export const copy = {
     'error.service_not_found': 'Service was not found.',
     'error.customer_not_found': 'Customer was not found.',
     'error.customer_required': 'Add a customer before booking.',
-    'error.booking_not_found': 'Booking was not found.'
+    'error.booking_not_found': 'Booking was not found.',
+    'error.availability.invalid_query': 'Availability query is invalid.',
+    'error.availability.service_not_found': 'Service was not found.',
+    'error.availability.no_staff_for_service': 'No staff available for this service.'
   },
   errors: {
     staffMissingSalonId: 'Salon ID missing. Complete salon setup first.',

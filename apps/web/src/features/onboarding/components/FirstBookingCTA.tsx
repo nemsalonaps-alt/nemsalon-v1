@@ -1,6 +1,13 @@
 import type { BookingForm } from '../types';
 import { copy } from '../copy';
 
+type SlotOption = {
+  startUtc: string;
+  endUtc: string;
+  staffId: string;
+  label: string;
+};
+
 type FirstBookingCTAProps = {
   salonName: string;
   staffName: string;
@@ -14,6 +21,10 @@ type FirstBookingCTAProps = {
   bookingSaving: boolean;
   checkoutUrl?: string | null;
   smsAvailable: boolean;
+  slots: SlotOption[];
+  slotsLoading: boolean;
+  slotsError?: string;
+  onPickSlot: (slot: SlotOption) => void;
   onBookingChange: (patch: Partial<BookingForm>) => void;
   onCreateBooking: () => void;
   onBack: () => void;
@@ -33,6 +44,10 @@ export function FirstBookingCTA({
   bookingSaving,
   checkoutUrl,
   smsAvailable,
+  slots,
+  slotsLoading,
+  slotsError,
+  onPickSlot,
   onBookingChange,
   onCreateBooking,
   onBack,
@@ -64,6 +79,31 @@ export function FirstBookingCTA({
           <p>{heroSummary}</p>
         </div>
         <div className="note">{copy.cta.heroNote}</div>
+      </div>
+
+      <div className="panel" style={{ marginTop: 16 }}>
+        <div className="badge">{copy.cta.slots.badge}</div>
+        <h3>{copy.cta.slots.title}</h3>
+        <p>{copy.cta.slots.body}</p>
+        {slotsLoading ? (
+          <div className="note">{copy.cta.slots.loading}</div>
+        ) : slots.length === 0 ? (
+          <div className="note">{copy.cta.slots.empty}</div>
+        ) : (
+          <div className="btn-row" style={{ flexWrap: 'wrap' }}>
+            {slots.slice(0, 10).map((slot) => (
+              <button
+                key={`${slot.staffId}-${slot.startUtc}`}
+                className="btn ghost"
+                type="button"
+                onClick={() => onPickSlot(slot)}
+              >
+                {slot.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {slotsError && <div className="banner">{slotsError}</div>}
       </div>
 
       <div className="grid two" style={{ marginTop: 18 }}>

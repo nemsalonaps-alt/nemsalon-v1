@@ -2,6 +2,24 @@ export type GateState = 'checking' | 'needs-onboarding' | 'has-salon' | 'needs-l
 export type StepId = 'salon' | 'staff' | 'payments' | 'cta';
 export type DayId = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
+export type AvailabilitySlot = {
+  startUtc: string;
+  endUtc: string;
+  staffId: string;
+};
+
+export type AvailabilityResponse = {
+  slots: AvailabilitySlot[];
+  meta: {
+    fromUtc: string;
+    days: number;
+    intervalMinutes: number;
+    serviceId: string;
+    staffId?: string;
+    timezone: string;
+  };
+};
+
 export type WeeklyHours = {
   day: DayId;
   enabled: boolean;

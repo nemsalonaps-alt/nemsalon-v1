@@ -1,5 +1,5 @@
 import { copy } from './copy';
-import type { AuthMeResponse, WeeklyHours } from './types';
+import type { AuthMeResponse, WeeklyHours, AvailabilityResponse } from './types';
 import { supabase } from '../../lib/supabase';
 
 const apiBase =
@@ -192,4 +192,23 @@ export async function createCheckout(bookingId: string) {
       cancelUrl: 'https://example.com/cancel'
     })
   });
+}
+
+export async function fetchAvailabilitySlots(params: {
+  serviceId: string;
+  staffId?: string;
+  from?: string;
+  days?: number;
+  limit?: number;
+  intervalMinutes?: number;
+}) {
+  const query = new URLSearchParams();
+  query.set('serviceId', params.serviceId);
+  if (params.staffId) query.set('staffId', params.staffId);
+  if (params.from) query.set('from', params.from);
+  if (params.days) query.set('days', String(params.days));
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.intervalMinutes) query.set('intervalMinutes', String(params.intervalMinutes));
+
+  return apiRequest<AvailabilityResponse>(`/v1/availability/slots?${query.toString()}`);
 }
