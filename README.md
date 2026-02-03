@@ -63,6 +63,20 @@ pnpm test
 pnpm supabase:stop
 ```
 
+**Local login (Supabase)**
+- Åbn Supabase Studio (local) → Auth → Users → "Add user".
+- Sæt email + password.
+- Hvis user er unconfirmed: klik "Confirm".
+- Log ind i web appen.
+
+**Dev bypass (kun lokalt)**
+- Sæt `VITE_DEV_USER_ID` i repo root `.env.local` for at skippe login i dev.
+- Fjern `VITE_DEV_USER_ID` for at teste rigtig login.
+
+**Env (lokalt)**
+- Web læser `VITE_*` fra repo root `.env.local`.
+- API læser `.env` og `.env.local` fra repo root (via dotenv).
+
 **Env vars (server)**
 - STRIPE_SECRET_KEY
 - STRIPE_WEBHOOK_SECRET
