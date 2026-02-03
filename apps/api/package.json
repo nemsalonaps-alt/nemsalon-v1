@@ -1,0 +1,25 @@
+{
+  "name": "@nemsalon/api",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "test": "vitest run --config vitest.config.ts",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.1",
+    "fastify": "^4.26.2",
+    "pino": "^8.21.0",
+    "stripe": "^14.23.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2",
+    "vitest": "^1.5.0"
+  }
+}

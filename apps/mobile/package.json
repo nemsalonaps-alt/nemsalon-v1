@@ -1,0 +1,9 @@
+{
+  "name": "@nemsalon/mobile",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo \"TODO: setup mobile app\"",
+    "build": "echo \"TODO: build mobile app\""
+  }
+}

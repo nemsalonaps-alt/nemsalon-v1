@@ -1,0 +1,9 @@
+{
+  "name": "@nemsalon/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo \"TODO: setup web app\"",
+    "build": "echo \"TODO: build web app\""
+  }
+}

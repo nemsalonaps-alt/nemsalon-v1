@@ -1,0 +1,826 @@
+openapi: 3.0.3
+info:
+  title: NEMSalon API
+  version: 1.0.0
+  description: Contract-first API for web and mobile clients.
+servers:
+  - url: https://api.nemsalon.dk
+    description: Production
+  - url: https://staging-api.nemsalon.dk
+    description: Staging
+  - url: http://localhost:3000/api
+    description: Local
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Salons
+  - name: Services
+  - name: Staff
+  - name: Customers
+  - name: Bookings
+  - name: Payments
+  - name: Notifications
+  - name: Devices
+  - name: Webhooks
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      responses:
+        '200':
+          description: OK
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness check
+      responses:
+        '200':
+          description: Ready
+
+  /v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Create a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke current session
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204':
+          description: Logged out
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/salons/{salonId}:
+    get:
+      tags: [Salons]
+      summary: Get salon
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SalonId'
+      responses:
+        '200':
+          description: Salon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Salon'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    patch:
+      tags: [Salons]
+      summary: Update salon
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SalonId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalonUpdate'
+      responses:
+        '200':
+          description: Updated salon
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Salon'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/services:
+    get:
+      tags: [Services]
+      summary: List services
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Service list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceList'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Services]
+      summary: Create service
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceCreate'
+      responses:
+        '201':
+          description: Created service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/services/{serviceId}:
+    get:
+      tags: [Services]
+      summary: Get service
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+      responses:
+        '200':
+          description: Service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    patch:
+      tags: [Services]
+      summary: Update service
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/ServiceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ServiceUpdate'
+      responses:
+        '200':
+          description: Updated service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Service'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff:
+    get:
+      tags: [Staff]
+      summary: List staff
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Staff list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffList'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Staff]
+      summary: Create staff
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffCreate'
+      responses:
+        '201':
+          description: Created staff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/customers:
+    get:
+      tags: [Customers]
+      summary: List customers
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Customer list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerList'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Customers]
+      summary: Create customer
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerCreate'
+      responses:
+        '201':
+          description: Created customer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/customers/{customerId}:
+    get:
+      tags: [Customers]
+      summary: Get customer
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: Customer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    patch:
+      tags: [Customers]
+      summary: Update customer
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerUpdate'
+      responses:
+        '200':
+          description: Updated customer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Customer'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/bookings:
+    get:
+      tags: [Bookings]
+      summary: List bookings
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Booking list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingList'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Bookings]
+      summary: Create booking
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCreate'
+      responses:
+        '201':
+          description: Created booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/bookings/{bookingId}:
+    get:
+      tags: [Bookings]
+      summary: Get booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    patch:
+      tags: [Bookings]
+      summary: Update booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingUpdate'
+      responses:
+        '200':
+          description: Updated booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/bookings/{bookingId}/checkout:
+    post:
+      tags: [Payments, Bookings]
+      summary: Create online checkout session for booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingCheckoutRequest'
+      responses:
+        '201':
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCheckoutResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/payments/{paymentId}:
+    get:
+      tags: [Payments]
+      summary: Get payment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Payment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Payment'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/webhooks/stripe:
+    post:
+      tags: [Webhooks, Payments]
+      summary: Stripe webhook receiver
+      parameters:
+        - in: header
+          name: stripe-signature
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StripeWebhookEvent'
+      responses:
+        '200':
+          description: Webhook received
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/notifications/send:
+    post:
+      tags: [Notifications]
+      summary: Send notification
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationRequest'
+      responses:
+        '202':
+          description: Notification queued
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/devices/register:
+    post:
+      tags: [Devices]
+      summary: Register device for push notifications
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegisterRequest'
+      responses:
+        '201':
+          description: Device registered
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    SalonId:
+      name: salonId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ServiceId:
+      name: serviceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    StaffId:
+      name: staffId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CustomerId:
+      name: customerId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    BookingId:
+      name: bookingId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    PaymentId:
+      name: paymentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message, traceId]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+        traceId:
+          type: string
+
+    User:
+      type: object
+      required: [id, email, role]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { type: string, enum: [owner, admin, staff] }
+        salonId: { type: string, format: uuid }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        deviceId: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    LoginResponse:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+        user: { $ref: '#/components/schemas/User' }
+
+    Salon:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        locale: { type: string }
+        timezone: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    SalonUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        locale: { type: string }
+        timezone: { type: string }
+
+    Service:
+      type: object
+      required: [id, name, price, durationMinutes]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        price: { type: integer, description: 'Minor units (e.g., øre)' }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        durationMinutes: { type: integer }
+        active: { type: boolean }
+
+    ServiceCreate:
+      type: object
+      required: [name, price, durationMinutes]
+      properties:
+        name: { type: string }
+        price: { type: integer, description: 'Minor units (e.g., øre)' }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        durationMinutes: { type: integer }
+        active: { type: boolean }
+
+    ServiceUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        price: { type: integer, description: 'Minor units (e.g., øre)' }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        durationMinutes: { type: integer }
+        active: { type: boolean }
+
+    ServiceList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Service' }
+
+    Staff:
+      type: object
+      required: [id, name, role]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, staff] }
+        active: { type: boolean }
+
+    StaffCreate:
+      type: object
+      required: [name, role]
+      properties:
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, staff] }
+        active: { type: boolean }
+
+    StaffList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Staff' }
+
+    Customer:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        notes: { type: string }
+
+    CustomerCreate:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        notes: { type: string }
+
+    CustomerUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        notes: { type: string }
+
+    CustomerList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Customer' }
+
+    Booking:
+      type: object
+      required: [id, salonId, customerId, staffId, serviceId, startTime, endTime, status, totalAmount, currency]
+      properties:
+        id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        serviceId: { type: string, format: uuid }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
+        totalAmount: { type: integer, description: 'Minor units (e.g., øre)' }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        notes: { type: string }
+
+    BookingCreate:
+      type: object
+      required: [salonId, staffId, serviceId, startTime, endTime]
+      properties:
+        salonId: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        customer: { $ref: '#/components/schemas/CustomerCreate' }
+        staffId: { type: string, format: uuid }
+        serviceId: { type: string, format: uuid }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        notes: { type: string }
+      oneOf:
+        - required: [customerId]
+        - required: [customer]
+
+    BookingUpdate:
+      type: object
+      properties:
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
+        notes: { type: string }
+
+    BookingList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Booking' }
+
+    BookingCheckoutRequest:
+      type: object
+      required: [successUrl, cancelUrl]
+      properties:
+        provider: { type: string, enum: [stripe, mobilepay] }
+        successUrl: { type: string, format: uri }
+        cancelUrl: { type: string, format: uri }
+
+    BookingCheckoutResponse:
+      type: object
+      required: [checkoutUrl, paymentId, provider]
+      properties:
+        checkoutUrl: { type: string, format: uri }
+        paymentId: { type: string, format: uuid }
+        provider: { type: string, enum: [stripe, mobilepay] }
+
+    Payment:
+      type: object
+      required: [id, bookingId, status, amount, currency, provider]
+      properties:
+        id: { type: string, format: uuid }
+        bookingId: { type: string, format: uuid }
+        status: { type: string, enum: [pending, paid, failed, refunded] }
+        amount: { type: integer, description: 'Minor units (e.g., øre)' }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        provider: { type: string, enum: [stripe, mobilepay] }
+        providerReference: { type: string }
+
+    StripeWebhookEvent:
+      type: object
+      description: Raw Stripe webhook payload. Schema is intentionally minimal for forward compatibility.
+      properties:
+        id: { type: string }
+        type: { type: string }
+        data:
+          type: object
+          properties:
+            object: { type: object }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    NotificationRequest:
+      type: object
+      required: [type, to, template]
+      properties:
+        type: { type: string, enum: [email, sms, push] }
+        to: { type: string }
+        template: { type: string }
+        data: { type: object, additionalProperties: true }
+
+    DeviceRegisterRequest:
+      type: object
+      required: [deviceId, platform, pushToken]
+      properties:
+        deviceId: { type: string }
+        platform: { type: string, enum: [ios, android, web] }
+        pushToken: { type: string }
