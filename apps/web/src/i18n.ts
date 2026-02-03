@@ -56,8 +56,7 @@ export const copy = {
     badge: 'Step 1',
     title: 'Create your salon',
     body: 'Set your default settings now. You can always fine-tune later.',
-    missingSalonId:
-      'No salon ID found on your profile. You may need an admin to create a salon first.',
+    missingSalonId: 'No salon was assigned yet. Please retry login or contact support.',
     fields: {
       nameLabel: 'Salon name',
       namePlaceholder: 'Studio Ember',
@@ -70,7 +69,7 @@ export const copy = {
     hours: {
       title: 'Business hours',
       body: 'Default hours for new staff and booking availability.',
-      note: 'Business hours are saved locally until a /business-hours endpoint exists.'
+      note: 'Business hours are saved with your salon calendar.'
     },
     actions: {
       saving: 'Saving...',
@@ -97,8 +96,7 @@ export const copy = {
       pricePlaceholder: '499,00',
       bufferLabel: 'Buffer time',
       assignLabel: 'This staff can perform this service',
-      assignNote:
-        'Assignment is stored locally for now. API endpoint for staff-service mapping is not in the current OpenAPI.'
+      assignNote: 'We will save the assignment so services and calendar stay aligned.'
     },
     actions: {
       back: 'Back to salon setup',
@@ -204,7 +202,16 @@ export const copy = {
     'error.database_error': 'We hit a database error. Please try again.',
     'error.request_error': 'We could not complete the request. Please try again.',
     'error.internal_error': 'Something went wrong on our side. Please try again.',
+    'error.unauthorized': 'Please sign in again to continue.',
+    'error.salon_required': 'Please complete salon setup first.',
+    'error.salon_forbidden': 'You do not have access to this salon.',
+    'error.business_hours_invalid': 'Start time must be before end time.',
+    'error.business_hours_duplicate_day': 'Each day can only appear once.',
+    'error.provision_failed': 'We could not create your salon yet. Please retry.',
     'error.salon_not_found': 'Salon was not found.',
+    'error.staff_salon_mismatch': 'This staff member does not belong to the salon.',
+    'error.service_salon_mismatch': 'This service does not belong to the salon.',
+    'error.customer_salon_mismatch': 'This customer does not belong to the salon.',
     'error.staff_not_found': 'Staff member was not found.',
     'error.service_not_found': 'Service was not found.',
     'error.customer_not_found': 'Customer was not found.',
