@@ -48,6 +48,63 @@ function buildWebhookRequest(paymentId: string, bookingId: string) {
   };
 }
 
+async function seedSalonData(
+  supabase: ReturnType<typeof getSupabaseClient>,
+  customerOverrides?: { email?: string; phone?: string }
+) {
+  const salonId = randomUUID();
+  const staffId = randomUUID();
+  const serviceId = randomUUID();
+  const customerId = randomUUID();
+  const email = `test+${randomUUID()}@example.com`;
+  const password = 'TestPass123!';
+
+  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true
+  });
+  if (authError || !authUser.user) {
+    throw authError ?? new Error('Failed to create auth user');
+  }
+
+  await supabase.from('salons').insert({ id: salonId, name: 'Test Salon' });
+  await supabase.from('users').insert({ id: authUser.user.id, email, primary_salon_id: salonId });
+  await supabase.from('memberships').insert({
+    salon_id: salonId,
+    user_id: authUser.user.id,
+    role: 'owner',
+    active: true
+  });
+  await supabase.from('staff_profiles').insert({
+    id: staffId,
+    salon_id: salonId,
+    display_name: 'Test Staff',
+    role: 'staff'
+  });
+  await supabase.from('services').insert({
+    id: serviceId,
+    salon_id: salonId,
+    name: 'Test Service',
+    duration_minutes: 60,
+    price_amount: 45000,
+    currency: 'DKK'
+  });
+  await supabase.from('staff_services').insert({
+    staff_id: staffId,
+    service_id: serviceId
+  });
+  await supabase.from('customers').insert({
+    id: customerId,
+    salon_id: salonId,
+    name: 'Test Customer',
+    email: customerOverrides?.email,
+    phone: customerOverrides?.phone
+  });
+
+  return { salonId, staffId, serviceId, customerId, userId: authUser.user.id };
+}
+
 describe('booking flow', () => {
   let app: ReturnType<typeof buildApp>;
 
@@ -62,31 +119,7 @@ describe('booking flow', () => {
 
   itIfSupabase('prevents overlapping bookings for same staff', async () => {
     const supabase = getSupabaseClient();
-    const salonId = randomUUID();
-    const staffId = randomUUID();
-    const serviceId = randomUUID();
-    const customerId = randomUUID();
-
-    await supabase.from('salons').insert({ id: salonId, name: 'Test Salon' });
-    await supabase.from('staff_profiles').insert({
-      id: staffId,
-      salon_id: salonId,
-      display_name: 'Test Staff',
-      role: 'staff'
-    });
-    await supabase.from('services').insert({
-      id: serviceId,
-      salon_id: salonId,
-      name: 'Test Service',
-      duration_minutes: 60,
-      price_amount: 45000,
-      currency: 'DKK'
-    });
-    await supabase.from('customers').insert({
-      id: customerId,
-      salon_id: salonId,
-      name: 'Test Customer'
-    });
+    const { salonId, staffId, serviceId, customerId, userId } = await seedSalonData(supabase);
 
     const start = new Date();
     const end = new Date(start.getTime() + 60 * 60 * 1000);
@@ -94,6 +127,7 @@ describe('booking flow', () => {
     const createResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
+      headers: { 'x-user-id': userId },
       payload: {
         salonId,
         customerId,
@@ -109,6 +143,7 @@ describe('booking flow', () => {
     const overlapResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
+      headers: { 'x-user-id': userId },
       payload: {
         salonId,
         customerId,
@@ -130,30 +165,7 @@ describe('booking flow', () => {
 
   itIfSupabase('webhook is idempotent', async () => {
     const supabase = getSupabaseClient();
-    const salonId = randomUUID();
-    const staffId = randomUUID();
-    const serviceId = randomUUID();
-    const customerId = randomUUID();
-
-    await supabase.from('salons').insert({ id: salonId, name: 'Test Salon' });
-    await supabase.from('staff_profiles').insert({
-      id: staffId,
-      salon_id: salonId,
-      display_name: 'Test Staff',
-      role: 'staff'
-    });
-    await supabase.from('services').insert({
-      id: serviceId,
-      salon_id: salonId,
-      name: 'Test Service',
-      duration_minutes: 60,
-      price_amount: 45000,
-      currency: 'DKK'
-    });
-    await supabase.from('customers').insert({
-      id: customerId,
-      salon_id: salonId,
-      name: 'Test Customer',
+    const { salonId, staffId, serviceId, customerId, userId } = await seedSalonData(supabase, {
       email: 'customer@example.com',
       phone: '+4512345678'
     });
@@ -164,6 +176,7 @@ describe('booking flow', () => {
     const bookingResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
+      headers: { 'x-user-id': userId },
       payload: {
         salonId,
         customerId,
@@ -178,6 +191,7 @@ describe('booking flow', () => {
     const checkoutResponse = await app.inject({
       method: 'POST',
       url: `/v1/bookings/${booking.id}/checkout`,
+      headers: { 'x-user-id': userId },
       payload: {
         successUrl: 'https://example.com/success',
         cancelUrl: 'https://example.com/cancel'
@@ -223,30 +237,7 @@ describe('booking flow', () => {
 
   itIfSupabase('confirms booking and queues notifications', async () => {
     const supabase = getSupabaseClient();
-    const salonId = randomUUID();
-    const staffId = randomUUID();
-    const serviceId = randomUUID();
-    const customerId = randomUUID();
-
-    await supabase.from('salons').insert({ id: salonId, name: 'Test Salon' });
-    await supabase.from('staff_profiles').insert({
-      id: staffId,
-      salon_id: salonId,
-      display_name: 'Test Staff',
-      role: 'staff'
-    });
-    await supabase.from('services').insert({
-      id: serviceId,
-      salon_id: salonId,
-      name: 'Test Service',
-      duration_minutes: 60,
-      price_amount: 45000,
-      currency: 'DKK'
-    });
-    await supabase.from('customers').insert({
-      id: customerId,
-      salon_id: salonId,
-      name: 'Test Customer',
+    const { salonId, staffId, serviceId, customerId, userId } = await seedSalonData(supabase, {
       email: 'customer2@example.com',
       phone: '+4512345679'
     });
@@ -257,6 +248,7 @@ describe('booking flow', () => {
     const bookingResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
+      headers: { 'x-user-id': userId },
       payload: {
         salonId,
         customerId,
@@ -271,6 +263,7 @@ describe('booking flow', () => {
     const checkoutResponse = await app.inject({
       method: 'POST',
       url: `/v1/bookings/${booking.id}/checkout`,
+      headers: { 'x-user-id': userId },
       payload: {
         successUrl: 'https://example.com/success',
         cancelUrl: 'https://example.com/cancel'
