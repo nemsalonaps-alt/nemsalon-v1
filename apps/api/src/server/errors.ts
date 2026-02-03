@@ -13,12 +13,14 @@ export function toErrorResponse(error: unknown, traceId: string) {
       statusCode: 400,
       body: {
         code: 'VALIDATION_ERROR',
-        message: 'Request validation failed.',
+        message: 'error.validation_failed',
         details: error.flatten(),
         traceId
       }
     };
   }
+
+  const isKey = (value: string) => /^[a-z][a-z0-9_.-]*$/.test(value);
 
   const err = error as {
     statusCode?: number;
@@ -27,8 +29,10 @@ export function toErrorResponse(error: unknown, traceId: string) {
     details?: unknown;
   };
   const statusCode = typeof err?.statusCode === 'number' ? err.statusCode : 500;
-  const code = typeof err?.code === 'string' ? err.code : statusCode >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR';
-  const message = typeof err?.message === 'string' ? err.message : 'Unexpected error';
+  const code =
+    typeof err?.code === 'string' ? err.code : statusCode >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR';
+  const rawMessage = typeof err?.message === 'string' ? err.message : '';
+  const message = isKey(rawMessage) ? rawMessage : `error.${code.toLowerCase()}`;
 
   const body: ErrorResponse = {
     code,

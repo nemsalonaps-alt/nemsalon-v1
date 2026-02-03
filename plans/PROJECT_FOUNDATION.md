@@ -114,6 +114,12 @@ Day 5
 - Push provider: FCM.
 
 ## 12) Onboarding v1 funnel (UI + API)
+Fokus: Første booking på <10 min
+
+Alt der ikke direkte understøtter dette er out of scope
+
+POS, marketing, loyalty, multi-lokation = senere
+
 Goal: fast first booking with minimal setup. Two required steps, one optional, then CTA.
 
 Entry gate
@@ -126,7 +132,8 @@ Step 1: Salon setup (required)
 - Validation: name 2-60 chars; timezone IANA; locale string; currency ISO-4217; business hours start < end, at least 1 day.
 - API:
   - POST /v1/salons { name, timezone, locale, currency }
-  - PUT /v1/salons/{id}/business-hours { weekly: [{ day, start, end }] }
+  - PATCH /v1/salons/{id} { name?, timezone?, locale?, currency? }
+  - TODO later: PUT /v1/salons/{id}/business-hours { weekly: [{ day, start, end }] }
 
 Step 2: Staff + services (required)
 - UI: two cards on one screen.
@@ -135,10 +142,10 @@ Step 2: Staff + services (required)
 - Assign staff to service (checkbox default on). Require at least 1 staff + 1 service.
 - Validation: name 2-60 chars; role enum; duration 5-480; price integer minor units; buffer from allowed list.
 - API:
-  - POST /v1/salons/{id}/staff { name, role }
-  - PUT /v1/staff/{staffId}/working-hours (only if custom)
-  - POST /v1/salons/{id}/services { name, durationMin, priceAmount, currency, bufferMin }
-  - POST /v1/staff/{staffId}/services { serviceId } or { serviceIds: [] }
+  - POST /v1/staff { salonId, name, role }
+  - POST /v1/services { salonId, name, durationMinutes, priceAmount, currency, bufferMinutes? }
+  - TODO later: PUT /v1/staff/{staffId}/working-hours (only if custom)
+  - TODO later: POST /v1/staff/{staffId}/services { serviceId } or { serviceIds: [] }
 
 Optional Step 3: Payments setup (optional)
 - UI: toggle "Enable online payments now?"
@@ -158,3 +165,13 @@ Empty states + error UX (v1)
 - If no staff/services: show "Complete onboarding" CTA.
 - If booking overlap: "Time just got booked - pick another slot."
 - If checkout fails: booking stays, payment pending.
+
+Onboarding v1 is done when:
+
+En ny bruger kan oprette salon, staff og service
+
+Brugeren kan lave én bekræftet booking
+
+En email confirmation sendes (SMS hvis plan tillader)
+
+Ingen manuel DB-ændring er nødvendig

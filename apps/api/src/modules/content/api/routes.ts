@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { notImplemented } from '../../../server/not-implemented.js';
 import { contentService } from '../service/content-service.js';
+import { authService } from '../../auth/service/auth-service.js';
+import { httpError } from '../../../server/http-error.js';
 
 const bookingCreateSchema = z
   .object({
@@ -31,12 +33,102 @@ const bookingCreateSchema = z
   });
 
 export function registerContentRoutes(app: FastifyInstance) {
+  const salonCreateSchema = z.object({
+    name: z.string().min(2).max(120),
+    timezone: z.string().min(2),
+    locale: z.string().min(2),
+    currency: z.string().length(3)
+  });
+
+  const salonUpdateSchema = z
+    .object({
+      name: z.string().min(2).max(120).optional(),
+      timezone: z.string().min(2).optional(),
+      locale: z.string().min(2).optional(),
+      currency: z.string().length(3).optional()
+    })
+    .refine((value) => Object.keys(value).length > 0, { message: 'No updates provided.' });
+
+  const staffCreateSchema = z.object({
+    name: z.string().min(2).max(80),
+    role: z.enum(['owner', 'admin', 'staff']),
+    active: z.boolean().default(true)
+  });
+
+  const serviceCreateSchema = z.object({
+    name: z.string().min(2).max(80),
+    durationMinutes: z.number().int().min(5).max(480),
+    bufferMinutes: z.number().int().min(0).max(240).optional(),
+    price: z.number().int().min(1),
+    currency: z.string().length(3),
+    active: z.boolean().default(true)
+  });
+
+  const businessHoursEntrySchema = z.object({
+    day: z.enum(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/),
+    enabled: z.boolean()
+  });
+
+  const businessHoursPayloadSchema = z.object({
+    weekly: z.array(businessHoursEntrySchema).min(1)
+  });
+
+  const staffServicesAssignSchema = z.object({
+    serviceIds: z.array(z.string().uuid()).min(1)
+  });
+
   app.get('/v1/salons/:salonId', async (request, reply) => {
     return notImplemented(reply, request, 'Get salon not implemented');
   });
 
+  app.post('/v1/salons', async (request, reply) => {
+    const body = salonCreateSchema.parse(request.body);
+    const salon = await contentService.createSalon(body);
+    reply.code(201).send(salon);
+  });
+
   app.patch('/v1/salons/:salonId', async (request, reply) => {
-    return notImplemented(reply, request, 'Update salon not implemented');
+    const params = z.object({ salonId: z.string().uuid() }).parse(request.params);
+    const body = salonUpdateSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    if (salonId !== params.salonId) {
+      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this salon.');
+    }
+    const salon = await contentService.updateSalon(params.salonId, body);
+    reply.code(200).send(salon);
+  });
+
+  app.get('/v1/salons/:salonId/business-hours', async (request, reply) => {
+    const params = z.object({ salonId: z.string().uuid() }).parse(request.params);
+    const salonId = await authService.requirePrimarySalonId(request);
+    if (salonId !== params.salonId) {
+      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this salon.');
+    }
+    const weekly = await contentService.getSalonBusinessHours(params.salonId);
+    reply.code(200).send({ weekly });
+  });
+
+  app.put('/v1/salons/:salonId/business-hours', async (request, reply) => {
+    const params = z.object({ salonId: z.string().uuid() }).parse(request.params);
+    const salonId = await authService.requirePrimarySalonId(request);
+    if (salonId !== params.salonId) {
+      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this salon.');
+    }
+    const body = businessHoursPayloadSchema.parse(request.body);
+    const daySet = new Set<string>();
+    for (const entry of body.weekly) {
+      if (daySet.has(entry.day)) {
+        throw httpError(400, 'BUSINESS_HOURS_DUPLICATE_DAY', 'Each day can only appear once.');
+      }
+      daySet.add(entry.day);
+      if (entry.enabled && entry.startTime >= entry.endTime) {
+        throw httpError(400, 'BUSINESS_HOURS_INVALID', 'Start time must be before end time.');
+      }
+    }
+    const weekly = await contentService.setSalonBusinessHours(params.salonId, body.weekly);
+    reply.code(200).send({ weekly });
   });
 
   app.get('/v1/services', async (request, reply) => {
@@ -44,7 +136,18 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.post('/v1/services', async (request, reply) => {
-    return notImplemented(reply, request, 'Create service not implemented');
+    const body = serviceCreateSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const service = await contentService.createService({
+      salonId,
+      name: body.name,
+      durationMinutes: body.durationMinutes,
+      bufferMinutes: body.bufferMinutes,
+      price: body.price,
+      currency: body.currency,
+      active: body.active ?? true
+    });
+    reply.code(201).send(service);
   });
 
   app.get('/v1/services/:serviceId', async (request, reply) => {
@@ -60,7 +163,37 @@ export function registerContentRoutes(app: FastifyInstance) {
   });
 
   app.post('/v1/staff', async (request, reply) => {
-    return notImplemented(reply, request, 'Create staff not implemented');
+    const body = staffCreateSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const staff = await contentService.createStaff({
+      salonId,
+      name: body.name,
+      role: body.role,
+      active: body.active ?? true
+    });
+    reply.code(201).send(staff);
+  });
+
+  app.get('/v1/staff/:staffId/services', async (request, reply) => {
+    const params = z.object({ staffId: z.string().uuid() }).parse(request.params);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const serviceIds = await contentService.getStaffServices({
+      salonId,
+      staffId: params.staffId
+    });
+    reply.code(200).send({ staffId: params.staffId, serviceIds });
+  });
+
+  app.post('/v1/staff/:staffId/services', async (request, reply) => {
+    const params = z.object({ staffId: z.string().uuid() }).parse(request.params);
+    const body = staffServicesAssignSchema.parse(request.body);
+    const salonId = await authService.requirePrimarySalonId(request);
+    const result = await contentService.assignStaffServices({
+      salonId,
+      staffId: params.staffId,
+      serviceIds: body.serviceIds
+    });
+    reply.code(200).send(result);
   });
 
   app.get('/v1/customers', async (request, reply) => {
