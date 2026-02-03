@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import type { GateState } from '../types';
 import { copy } from '../copy';
-import { hasSupabaseConfig, supabase } from '../../../lib/supabase';
+import { hasSupabaseConfig, signInWithPassword, signUpWithPassword } from '../../../lib/auth';
 
 type GateProps = {
   state: GateState;
@@ -21,7 +21,7 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
 
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    if (!hasSupabaseConfig || !supabase) {
+    if (!hasSupabaseConfig) {
       setError(copy.gate.needsLogin.missingConfig);
       return;
     }
@@ -31,13 +31,10 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
     }
     setSubmitting(true);
     setError('');
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    const result = await signInWithPassword(email, password);
     setSubmitting(false);
-    if (signInError) {
-      setError(signInError.message);
+    if (!result.ok) {
+      setError(copy.apiErrors[result.errorKey] ?? copy.apiErrors.generic);
       return;
     }
     onRetry();
@@ -49,7 +46,7 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
   };
 
   const handleDevSignUp = async () => {
-    if (!hasSupabaseConfig || !supabase) {
+    if (!hasSupabaseConfig) {
       setDevStatus(copy.gate.devHelper.missingConfig);
       return;
     }
@@ -59,13 +56,13 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
     }
     setDevSubmitting(true);
     setDevStatus('');
-    const { data, error: signUpError } = await supabase.auth.signUp({ email, password });
+    const result = await signUpWithPassword(email, password);
     setDevSubmitting(false);
-    if (signUpError) {
-      setDevStatus(signUpError.message);
+    if (!result.ok) {
+      setDevStatus(copy.apiErrors[result.errorKey] ?? copy.apiErrors.generic);
       return;
     }
-    if (data.session?.access_token) {
+    if (!result.needsConfirm) {
       setDevStatus(copy.gate.devHelper.createdAndSignedIn);
       onRetry();
       return;

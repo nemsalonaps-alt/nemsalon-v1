@@ -1,6 +1,6 @@
 import { copy } from './copy';
 import type { AuthMeResponse, WeeklyHours, AvailabilityResponse } from './types';
-import { supabase } from '../../lib/supabase';
+import { getAccessToken } from '../../lib/auth';
 
 const apiBase =
   typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL
@@ -13,13 +13,6 @@ const isErrorKey = (value: string) => /^[a-z][a-z0-9_.-]*$/.test(value);
 
 const formatApiError = (message: string) =>
   isErrorKey(message) ? copy.apiErrors[message] ?? copy.apiErrors.generic : message;
-
-async function getAccessToken(): Promise<string | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data.session?.access_token ?? null;
-}
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
@@ -165,11 +158,9 @@ export async function assignStaffServices(staffId: string, serviceIds: string[])
 }
 
 export async function createBooking(payload: {
-  salonId: string;
   staffId: string;
   serviceId: string;
-  startTime: string;
-  endTime: string;
+  startUtc: string;
   notes?: string;
   customer: {
     name: string;
@@ -191,6 +182,20 @@ export async function createCheckout(bookingId: string) {
       successUrl: 'https://example.com/success',
       cancelUrl: 'https://example.com/cancel'
     })
+  });
+}
+
+export async function cancelBooking(bookingId: string, payload?: { reasonKey?: string; note?: string }) {
+  return apiRequest<{ booking: { id: string; status: string } }>(`/v1/bookings/${bookingId}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify(payload ?? {})
+  });
+}
+
+export async function rescheduleBooking(bookingId: string, payload: { staffId: string; startUtc: string }) {
+  return apiRequest<{ booking: { id: string; status: string } }>(`/v1/bookings/${bookingId}/reschedule`, {
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 

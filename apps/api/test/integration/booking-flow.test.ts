@@ -68,7 +68,13 @@ async function seedSalonData(
     throw authError ?? new Error('Failed to create auth user');
   }
 
-  await supabase.from('salons').insert({ id: salonId, name: 'Test Salon' });
+  await supabase.from('salons').insert({
+    id: salonId,
+    name: 'Test Salon',
+    timezone: 'Europe/Copenhagen',
+    locale: 'da-DK',
+    currency: 'DKK'
+  });
   await supabase.from('users').insert({ id: authUser.user.id, email, primary_salon_id: salonId });
   await supabase.from('memberships').insert({
     salon_id: salonId,
@@ -76,6 +82,15 @@ async function seedSalonData(
     role: 'owner',
     active: true
   });
+  await supabase.from('salon_business_hours').insert([
+    { salon_id: salonId, day: 'mon', start_time: '09:00', end_time: '17:00', enabled: true },
+    { salon_id: salonId, day: 'tue', start_time: '09:00', end_time: '17:00', enabled: true },
+    { salon_id: salonId, day: 'wed', start_time: '09:00', end_time: '17:00', enabled: true },
+    { salon_id: salonId, day: 'thu', start_time: '09:00', end_time: '17:00', enabled: true },
+    { salon_id: salonId, day: 'fri', start_time: '09:00', end_time: '17:00', enabled: true },
+    { salon_id: salonId, day: 'sat', start_time: '09:00', end_time: '17:00', enabled: false },
+    { salon_id: salonId, day: 'sun', start_time: '09:00', end_time: '17:00', enabled: false }
+  ]);
   await supabase.from('staff_profiles').insert({
     id: staffId,
     salon_id: salonId,
@@ -121,20 +136,17 @@ describe('booking flow', () => {
     const supabase = getSupabaseClient();
     const { salonId, staffId, serviceId, customerId, userId } = await seedSalonData(supabase);
 
-    const start = new Date();
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const startTime = '2025-01-06T08:00:00.000Z';
 
     const createResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
       headers: { 'x-user-id': userId },
       payload: {
-        salonId,
         customerId,
         staffId,
         serviceId,
-        startTime: start.toISOString(),
-        endTime: end.toISOString()
+        startUtc: startTime
       }
     });
 
@@ -145,12 +157,10 @@ describe('booking flow', () => {
       url: '/v1/bookings',
       headers: { 'x-user-id': userId },
       payload: {
-        salonId,
         customerId,
         staffId,
         serviceId,
-        startTime: start.toISOString(),
-        endTime: end.toISOString()
+        startUtc: startTime
       }
     });
 
@@ -160,6 +170,7 @@ describe('booking flow', () => {
     await supabase.from('customers').delete().eq('salon_id', salonId);
     await supabase.from('services').delete().eq('salon_id', salonId);
     await supabase.from('staff_profiles').delete().eq('salon_id', salonId);
+    await supabase.from('salon_business_hours').delete().eq('salon_id', salonId);
     await supabase.from('salons').delete().eq('id', salonId);
   });
 
@@ -170,20 +181,17 @@ describe('booking flow', () => {
       phone: '+4512345678'
     });
 
-    const start = new Date();
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const startTime = '2025-01-06T08:00:00.000Z';
 
     const bookingResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
       headers: { 'x-user-id': userId },
       payload: {
-        salonId,
         customerId,
         staffId,
         serviceId,
-        startTime: start.toISOString(),
-        endTime: end.toISOString()
+        startUtc: startTime
       }
     });
     const booking = bookingResponse.json() as { id: string };
@@ -232,6 +240,7 @@ describe('booking flow', () => {
     await supabase.from('customers').delete().eq('salon_id', salonId);
     await supabase.from('services').delete().eq('salon_id', salonId);
     await supabase.from('staff_profiles').delete().eq('salon_id', salonId);
+    await supabase.from('salon_business_hours').delete().eq('salon_id', salonId);
     await supabase.from('salons').delete().eq('id', salonId);
   });
 
@@ -242,20 +251,17 @@ describe('booking flow', () => {
       phone: '+4512345679'
     });
 
-    const start = new Date();
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const startTime = '2025-01-06T08:00:00.000Z';
 
     const bookingResponse = await app.inject({
       method: 'POST',
       url: '/v1/bookings',
       headers: { 'x-user-id': userId },
       payload: {
-        salonId,
         customerId,
         staffId,
         serviceId,
-        startTime: start.toISOString(),
-        endTime: end.toISOString()
+        startUtc: startTime
       }
     });
     const booking = bookingResponse.json() as { id: string };
@@ -296,6 +302,7 @@ describe('booking flow', () => {
     await supabase.from('customers').delete().eq('salon_id', salonId);
     await supabase.from('services').delete().eq('salon_id', salonId);
     await supabase.from('staff_profiles').delete().eq('salon_id', salonId);
+    await supabase.from('salon_business_hours').delete().eq('salon_id', salonId);
     await supabase.from('salons').delete().eq('id', salonId);
   });
 });

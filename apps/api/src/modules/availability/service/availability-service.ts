@@ -198,7 +198,7 @@ function buildWeeklyMap(weekly: { day: string; startTime: string; endTime: strin
 }
 
 function parseTime(value: string): number | null {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  const match = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/.exec(value);
   if (!match) return null;
   const hours = Number(match[1]);
   const minutes = Number(match[2]);

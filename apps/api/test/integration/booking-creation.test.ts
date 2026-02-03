@@ -16,7 +16,7 @@ type SeedResult = {
   extraStaffId?: string;
 };
 
-describe('availability slots', () => {
+describe('booking creation', () => {
   let app: ReturnType<typeof buildApp>;
 
   beforeAll(async () => {
@@ -28,7 +28,7 @@ describe('availability slots', () => {
     await app.close();
   });
 
-  async function seedBase(extraStaff = false): Promise<SeedResult> {
+  async function seedBase(includeExtraStaff = false): Promise<SeedResult> {
     const supabase = getSupabaseClient();
     const email = `test+${randomUUID()}@example.com`;
     const password = 'TestPass123!';
@@ -36,7 +36,7 @@ describe('availability slots', () => {
     const staffId = randomUUID();
     const serviceId = randomUUID();
     const customerId = randomUUID();
-    const extraStaffId = extraStaff ? randomUUID() : undefined;
+    const extraStaffId = includeExtraStaff ? randomUUID() : undefined;
 
     const { data: authUser, error } = await supabase.auth.admin.createUser({
       email,
@@ -114,7 +114,6 @@ describe('availability slots', () => {
   async function cleanup(seed: SeedResult) {
     const supabase = getSupabaseClient();
     await supabase.from('bookings').delete().eq('salon_id', seed.salonId);
-    await supabase.from('notification_outbox').delete().eq('salon_id', seed.salonId);
     await supabase.from('staff_services').delete().eq('staff_id', seed.staffId);
     if (seed.extraStaffId) {
       await supabase.from('staff_profiles').delete().eq('id', seed.extraStaffId);
@@ -129,80 +128,109 @@ describe('availability slots', () => {
     await supabase.auth.admin.deleteUser(seed.userId);
   }
 
-  itIfSupabase('returns slots within business hours', async () => {
+  itIfSupabase('creates a draft booking for a valid slot', async () => {
     const seed = await seedBase();
-    const fromUtc = '2025-01-06T08:00:00.000Z';
+    const startUtc = '2025-01-06T08:00:00.000Z';
     try {
       const response = await app.inject({
-        method: 'GET',
-        url: `/v1/availability/slots?serviceId=${seed.serviceId}&from=${encodeURIComponent(fromUtc)}&days=1&limit=3&intervalMinutes=60`,
-        headers: { 'x-user-id': seed.userId }
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
       });
 
-      expect(response.statusCode).toBe(200);
-      const body = response.json() as { slots: { startUtc: string; endUtc: string }[] };
-      expect(body.slots.length).toBeGreaterThan(0);
-      expect(body.slots[0].startUtc).toBe('2025-01-06T08:00:00.000Z');
-      expect(body.slots[0].endUtc).toBe('2025-01-06T09:00:00.000Z');
+      expect(response.statusCode).toBe(201);
+      const booking = response.json() as { status: string; startTime: string; endTime: string };
+      expect(booking.status).toBe('pending');
+      expect(new Date(booking.startTime).toISOString()).toBe(startUtc);
+      expect(new Date(booking.endTime).toISOString()).toBe('2025-01-06T09:00:00.000Z');
     } finally {
       await cleanup(seed);
     }
   });
 
-  itIfSupabase('filters out booked times', async () => {
+  itIfSupabase('rejects overlapping bookings', async () => {
     const seed = await seedBase();
-    const supabase = getSupabaseClient();
+    const startUtc = '2025-01-06T08:00:00.000Z';
     try {
-      await supabase.from('bookings').insert({
-        salon_id: seed.salonId,
-        customer_id: seed.customerId,
-        staff_id: seed.staffId,
-        service_id: seed.serviceId,
-        start_time: '2025-01-06T08:00:00.000Z',
-        end_time: '2025-01-06T09:00:00.000Z',
-        status: 'confirmed',
-        total_amount: 45000,
-        currency: 'DKK'
+      const first = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
       });
+      expect(first.statusCode).toBe(201);
 
-      const response = await app.inject({
-        method: 'GET',
-        url: `/v1/availability/slots?serviceId=${seed.serviceId}&from=${encodeURIComponent('2025-01-06T07:00:00.000Z')}&days=1&limit=6&intervalMinutes=60`,
-        headers: { 'x-user-id': seed.userId }
+      const second = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
       });
-
-      expect(response.statusCode).toBe(200);
-      const body = response.json() as { slots: { startUtc: string; endUtc: string }[] };
-      const blocked = body.slots.find((slot) => slot.startUtc === '2025-01-06T08:00:00.000Z');
-      expect(blocked).toBeUndefined();
+      expect(second.statusCode).toBe(409);
+      const body = second.json() as { message?: string };
+      expect(body.message).toBe('error.booking.time_not_available');
     } finally {
       await cleanup(seed);
     }
   });
 
-  itIfSupabase('respects staff restriction', async () => {
+  itIfSupabase('rejects staff not assigned to service', async () => {
     const seed = await seedBase(true);
+    const startUtc = '2025-01-06T08:00:00.000Z';
     try {
-      const fromUtc = '2025-01-06T08:00:00.000Z';
-      const list = await app.inject({
-        method: 'GET',
-        url: `/v1/availability/slots?serviceId=${seed.serviceId}&from=${encodeURIComponent(fromUtc)}&days=1&limit=5`,
-        headers: { 'x-user-id': seed.userId }
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.extraStaffId!,
+          startUtc,
+          customerId: seed.customerId
+        }
       });
-      expect(list.statusCode).toBe(200);
-      const body = list.json() as { slots: { staffId: string }[] };
-      const uniqueStaff = new Set(body.slots.map((slot) => slot.staffId));
-      expect(uniqueStaff.size).toBe(1);
-      expect(uniqueStaff.has(seed.staffId)).toBe(true);
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { message?: string };
+      expect(body.message).toBe('error.booking.staff_not_assigned_to_service');
+    } finally {
+      await cleanup(seed);
+    }
+  });
 
-      const blocked = await app.inject({
-        method: 'GET',
-        url: `/v1/availability/slots?serviceId=${seed.serviceId}&staffId=${seed.extraStaffId}&from=${encodeURIComponent(fromUtc)}&days=1&limit=5`,
-        headers: { 'x-user-id': seed.userId }
+  itIfSupabase('rejects start time outside 15-minute grid', async () => {
+    const seed = await seedBase();
+    const startUtc = '2025-01-06T08:07:00.000Z';
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
       });
-      expect(blocked.statusCode).toBe(400);
-      const errorBody = blocked.json() as { message?: string };
-      expect(errorBody.message).toBe('error.availability.no_staff_for_service');
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { message?: string };
+      expect(body.message).toBe('error.booking.invalid_time_alignment');
     } finally {
       await cleanup(seed);
     }

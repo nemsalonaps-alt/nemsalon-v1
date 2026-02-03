@@ -35,3 +35,43 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  security:
+    runs-on: ubuntu-latest
+    needs: ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Supabase CLI
+        run: npm install -g supabase@latest
+
+      - name: Start Supabase
+        run: supabase start
+
+      - name: Run migrations
+        run: pnpm supabase:migrate
+
+      - name: Export Supabase env
+        run: |
+          supabase status > /tmp/supabase-status.txt
+          node scripts/extract-supabase-env.mjs /tmp/supabase-status.txt >> $GITHUB_ENV
+
+      - name: Tenant isolation tests
+        env:
+          ALLOW_INTEGRATION_TESTS: 'true'
+        run: pnpm --filter @nemsalon/api test -- tenant-isolation

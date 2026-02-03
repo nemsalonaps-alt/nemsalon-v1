@@ -8,7 +8,9 @@ import {
   assignStaffServices,
   fetchAvailabilitySlots,
   createBooking,
-  createCheckout
+  createCheckout,
+  cancelBooking,
+  rescheduleBooking
 } from './api';
 import { Gate } from './pages/Gate';
 import { SalonStep } from './pages/SalonStep';
@@ -28,7 +30,7 @@ import type {
   AvailabilitySlot
 } from './types';
 import { copy } from './copy';
-import { supabase } from '../../lib/supabase';
+import { onAuthStateChange } from '../../lib/auth';
 import {
   addMinutes,
   defaultCurrencyForLocale,
@@ -96,6 +98,10 @@ export function OnboardingFlow() {
   const [bookingError, setBookingError] = useState('');
   const [bookingSuccess, setBookingSuccess] = useState('');
   const [bookingSaving, setBookingSaving] = useState(false);
+  const [lastBookingId, setLastBookingId] = useState<string | null>(null);
+  const [manageBusy, setManageBusy] = useState(false);
+  const [manageError, setManageError] = useState('');
+  const [manageSuccess, setManageSuccess] = useState('');
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const smsAvailable = false;
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
@@ -168,12 +174,11 @@ export function OnboardingFlow() {
   }, [gateState]);
 
   useEffect(() => {
-    if (!supabase) return;
-    const { data } = supabase.auth.onAuthStateChange(() => {
+    const subscription = onAuthStateChange(() => {
       setGateState('checking');
     });
     return () => {
-      data.subscription.unsubscribe();
+      subscription?.data.subscription.unsubscribe();
     };
   }, []);
 
@@ -354,14 +359,11 @@ export function OnboardingFlow() {
     setBookingError('');
     setBookingSuccess('');
 
-    const startTime = new Date(`${booking.date}T${booking.time}`).toISOString();
-    const endTime = new Date(`${booking.date}T${computedEndTime}`).toISOString();
+    const startUtc = new Date(`${booking.date}T${booking.time}`).toISOString();
     const bookingResult = await createBooking({
-      salonId,
       staffId,
       serviceId,
-      startTime,
-      endTime,
+      startUtc,
       notes: booking.notes || undefined,
       customer: {
         name: booking.customerName.trim(),
@@ -374,6 +376,9 @@ export function OnboardingFlow() {
       setBookingError(bookingResult.error);
       return;
     }
+    setLastBookingId(bookingResult.data.id);
+    setManageError('');
+    setManageSuccess('');
 
     if (paymentsEnabled && paymentsReady) {
       const checkoutResult = await createCheckout(bookingResult.data.id);
@@ -392,6 +397,41 @@ export function OnboardingFlow() {
     setBookingSuccess(
       paymentsEnabled ? copy.cta.success.bookingPending : copy.cta.success.bookingQueued
     );
+  };
+
+  const handleCancelBooking = async () => {
+    if (!lastBookingId) return;
+    setManageBusy(true);
+    setManageError('');
+    setManageSuccess('');
+    const result = await cancelBooking(lastBookingId, {
+      reasonKey: 'user.cancelled',
+      note: booking.notes || undefined
+    });
+    setManageBusy(false);
+    if (!result.ok) {
+      setManageError(result.error);
+      return;
+    }
+    setManageSuccess(copy.cta.success.bookingCancelled);
+  };
+
+  const handleReschedule = async (slot: AvailabilitySlot) => {
+    if (!lastBookingId || !staffId) return;
+    setManageBusy(true);
+    setManageError('');
+    setManageSuccess('');
+    const result = await rescheduleBooking(lastBookingId, {
+      staffId,
+      startUtc: slot.startUtc
+    });
+    setManageBusy(false);
+    if (!result.ok) {
+      setManageError(result.error);
+      return;
+    }
+    applySlot(slot);
+    setManageSuccess(copy.cta.success.bookingRescheduled);
   };
 
   if (
@@ -520,6 +560,10 @@ export function OnboardingFlow() {
               errors={bookingErrors}
               bookingError={bookingError}
               bookingSuccess={bookingSuccess}
+              manageError={manageError}
+              manageSuccess={manageSuccess}
+              manageBusy={manageBusy}
+              lastBookingId={lastBookingId}
               bookingSaving={bookingSaving}
               checkoutUrl={checkoutUrl}
               smsAvailable={smsAvailable}
@@ -527,6 +571,8 @@ export function OnboardingFlow() {
               slotsLoading={availabilityLoading}
               slotsError={availabilityError}
               onPickSlot={applySlot}
+              onCancelBooking={handleCancelBooking}
+              onReschedule={handleReschedule}
               onBookingChange={(patch) => setBooking((prev) => ({ ...prev, ...patch }))}
               onCreateBooking={handleCreateBooking}
               onBack={() => setStep('payments')}

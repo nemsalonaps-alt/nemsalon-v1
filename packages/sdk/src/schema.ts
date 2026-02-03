@@ -554,6 +554,58 @@ export interface paths {
       };
     };
   };
+  "/v1/bookings/{bookingId}/cancel": {
+    /** Cancel a booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody?: {
+        content: {
+          "application/json": components["schemas"]["CancelBookingRequest"];
+        };
+      };
+      responses: {
+        /** @description Cancelled booking */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BookingResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/bookings/{bookingId}/reschedule": {
+    /** Reschedule a booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RescheduleBookingRequest"];
+        };
+      };
+      responses: {
+        /** @description Rescheduled booking */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BookingResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/payments/{paymentId}": {
     /** Get payment */
     get: {
@@ -868,9 +920,15 @@ export interface components {
       staffId: string;
       /** Format: uuid */
       serviceId: string;
-      /** Format: date-time */
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp
+       */
       startTime: string;
-      /** Format: date-time */
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp
+       */
       endTime: string;
       /** @enum {string} */
       status: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
@@ -881,22 +939,49 @@ export interface components {
     };
     BookingCreate: {
       /** Format: uuid */
-      salonId: string;
-      /** Format: uuid */
       customerId?: string;
       customer?: components["schemas"]["CustomerCreate"];
       /** Format: uuid */
       staffId: string;
       /** Format: uuid */
       serviceId: string;
-      /** Format: date-time */
-      startTime: string;
       /**
        * Format: date-time
-       * @description Optional; server validates or computes endTime based on service duration.
+       * @description UTC ISO timestamp, must align to 15-minute grid.
+       */
+      startUtc: string;
+      /**
+       * Format: date-time
+       * @description Optional; server computes endTime based on service duration.
+       */
+      endUtc?: string;
+      /**
+       * Format: date-time
+       * @description Deprecated alias for startUtc.
+       */
+      startTime?: string;
+      /**
+       * Format: date-time
+       * @description Deprecated alias for endUtc.
        */
       endTime?: string;
       notes?: string;
+    };
+    BookingResponse: {
+      booking: components["schemas"]["Booking"];
+    };
+    CancelBookingRequest: {
+      reasonKey?: string;
+      note?: string;
+    };
+    RescheduleBookingRequest: {
+      /** Format: uuid */
+      staffId: string;
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp, must align to 15-minute grid.
+       */
+      startUtc: string;
     };
     BookingUpdate: {
       /** Format: date-time */

@@ -36,10 +36,14 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
 
   if (error) {
     if (error.code === '23P01') {
-      throw httpError(409, 'BOOKING_OVERLAP', 'Booking overlaps an existing booking.');
+      throw httpError(
+        409,
+        'BOOKING_TIME_NOT_AVAILABLE',
+        'error.booking.time_not_available'
+      );
     }
     if (error.code === '23503') {
-      throw httpError(400, 'INVALID_REFERENCE', 'Booking references missing records.', {
+      throw httpError(400, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference', {
         details: error.details
       });
     }
@@ -69,6 +73,68 @@ export async function updateBookingStatus(
     .from('bookings')
     .update({ status })
     .eq('id', bookingId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapBookingRow(data) : null;
+}
+
+export async function updateBookingSchedule(input: {
+  bookingId: string;
+  staffId: string;
+  startTime: string;
+  endTime: string;
+}): Promise<Booking | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('bookings')
+    .update({
+      staff_id: input.staffId,
+      start_time: input.startTime,
+      end_time: input.endTime
+    })
+    .eq('id', input.bookingId)
+    .select('*')
+    .maybeSingle();
+
+  if (error) {
+    if (error.code === '23P01') {
+      throw httpError(
+        409,
+        'BOOKING_TIME_NOT_AVAILABLE',
+        'error.booking.time_not_available'
+      );
+    }
+    if (error.code === '23503') {
+      throw httpError(400, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference', {
+        details: error.details
+      });
+    }
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data ? mapBookingRow(data) : null;
+}
+
+export async function cancelBooking(input: {
+  bookingId: string;
+  reasonKey?: string;
+  note?: string;
+}): Promise<Booking | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('bookings')
+    .update({
+      status: 'cancelled',
+      cancel_reason_key: input.reasonKey ?? null,
+      cancel_note: input.note ?? null,
+      cancelled_at: new Date().toISOString()
+    })
+    .eq('id', input.bookingId)
     .select('*')
     .maybeSingle();
 

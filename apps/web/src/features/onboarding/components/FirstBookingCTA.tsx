@@ -18,6 +18,10 @@ type FirstBookingCTAProps = {
   errors: Record<string, string>;
   bookingError?: string;
   bookingSuccess?: string;
+  manageError?: string;
+  manageSuccess?: string;
+  manageBusy: boolean;
+  lastBookingId?: string | null;
   bookingSaving: boolean;
   checkoutUrl?: string | null;
   smsAvailable: boolean;
@@ -25,6 +29,8 @@ type FirstBookingCTAProps = {
   slotsLoading: boolean;
   slotsError?: string;
   onPickSlot: (slot: SlotOption) => void;
+  onCancelBooking: () => void;
+  onReschedule: (slot: SlotOption) => void;
   onBookingChange: (patch: Partial<BookingForm>) => void;
   onCreateBooking: () => void;
   onBack: () => void;
@@ -41,6 +47,10 @@ export function FirstBookingCTA({
   errors,
   bookingError,
   bookingSuccess,
+  manageError,
+  manageSuccess,
+  manageBusy,
+  lastBookingId,
   bookingSaving,
   checkoutUrl,
   smsAvailable,
@@ -48,6 +58,8 @@ export function FirstBookingCTA({
   slotsLoading,
   slotsError,
   onPickSlot,
+  onCancelBooking,
+  onReschedule,
   onBookingChange,
   onCreateBooking,
   onBack,
@@ -246,6 +258,36 @@ export function FirstBookingCTA({
               {copy.cta.actions.viewCalendar}
             </button>
           )}
+        </div>
+      )}
+
+      {lastBookingId && (
+        <div className="panel" style={{ marginTop: 16 }}>
+          <h4>{copy.cta.manage.title}</h4>
+          <p>{copy.cta.manage.body}</p>
+          <div className="btn-row">
+            <button className="btn ghost" type="button" onClick={onCancelBooking} disabled={manageBusy}>
+              {manageBusy ? copy.cta.actions.cancelling : copy.cta.actions.cancel}
+            </button>
+          </div>
+          <div className="note" style={{ marginTop: 12 }}>
+            {copy.cta.manage.rescheduleHint}
+          </div>
+          <div className="btn-row" style={{ flexWrap: 'wrap' }}>
+            {slots.slice(0, 10).map((slot) => (
+              <button
+                key={`reschedule-${slot.staffId}-${slot.startUtc}`}
+                className="btn subtle"
+                type="button"
+                onClick={() => onReschedule(slot)}
+                disabled={manageBusy}
+              >
+                {copy.cta.actions.reschedule}: {slot.label}
+              </button>
+            ))}
+          </div>
+          {manageError && <div className="banner" style={{ marginTop: 12 }}>{manageError}</div>}
+          {manageSuccess && <div className="banner success" style={{ marginTop: 12 }}>{manageSuccess}</div>}
         </div>
       )}
     </section>

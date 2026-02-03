@@ -540,6 +540,54 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /v1/bookings/{bookingId}/cancel:
+    post:
+      tags: [Bookings]
+      summary: Cancel a booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Cancelled booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/bookings/{bookingId}/reschedule:
+    post:
+      tags: [Bookings]
+      summary: Reschedule a booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleBookingRequest'
+      responses:
+        '200':
+          description: Rescheduled booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /v1/payments/{paymentId}:
     get:
       tags: [Payments]
@@ -962,8 +1010,8 @@ components:
         customerId: { type: string, format: uuid }
         staffId: { type: string, format: uuid }
         serviceId: { type: string, format: uuid }
-        startTime: { type: string, format: date-time }
-        endTime: { type: string, format: date-time }
+        startTime: { type: string, format: date-time, description: 'UTC ISO timestamp' }
+        endTime: { type: string, format: date-time, description: 'UTC ISO timestamp' }
         status:
           type: string
           enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
@@ -973,22 +1021,55 @@ components:
 
     BookingCreate:
       type: object
-      required: [salonId, staffId, serviceId, startTime]
+      required: [staffId, serviceId, startUtc]
       properties:
-        salonId: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
         customer: { $ref: '#/components/schemas/CustomerCreate' }
         staffId: { type: string, format: uuid }
         serviceId: { type: string, format: uuid }
-        startTime: { type: string, format: date-time }
+        startUtc:
+          type: string
+          format: date-time
+          description: 'UTC ISO timestamp, must align to 15-minute grid.'
+        endUtc:
+          type: string
+          format: date-time
+          description: Optional; server computes endTime based on service duration.
+        startTime:
+          type: string
+          format: date-time
+          description: Deprecated alias for startUtc.
         endTime:
           type: string
           format: date-time
-          description: Optional; server validates or computes endTime based on service duration.
+          description: Deprecated alias for endUtc.
         notes: { type: string }
       oneOf:
         - required: [customerId]
         - required: [customer]
+
+    BookingResponse:
+      type: object
+      required: [booking]
+      properties:
+        booking:
+          $ref: '#/components/schemas/Booking'
+
+    CancelBookingRequest:
+      type: object
+      properties:
+        reasonKey: { type: string }
+        note: { type: string }
+
+    RescheduleBookingRequest:
+      type: object
+      required: [staffId, startUtc]
+      properties:
+        staffId: { type: string, format: uuid }
+        startUtc:
+          type: string
+          format: date-time
+          description: 'UTC ISO timestamp, must align to 15-minute grid.'
 
     BookingUpdate:
       type: object

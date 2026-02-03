@@ -187,13 +187,24 @@ export const copy = {
       back: 'Back to payments',
       create: 'Create booking',
       creating: 'Creating...',
+      cancel: 'Cancel booking',
+      cancelling: 'Cancelling...',
+      reschedule: 'Reschedule',
+      rescheduling: 'Rescheduling...',
       openCheckout: 'Open checkout',
       viewCalendar: 'View calendar'
+    },
+    manage: {
+      title: 'Manage this booking',
+      body: 'Cancel or reschedule using the suggested slots below.',
+      rescheduleHint: 'Pick a slot to reschedule this booking.'
     },
     success: {
       bookingPending: 'Booking created, payment pending.',
       checkoutReady: 'Booking created. Checkout ready.',
-      bookingQueued: 'Booking created. Confirmation is queued.'
+      bookingQueued: 'Booking created. Confirmation is queued.',
+      bookingCancelled: 'Booking cancelled.',
+      bookingRescheduled: 'Booking rescheduled.'
     },
     fallback: {
       salon: 'Your salon',
@@ -235,6 +246,7 @@ export const copy = {
     'error.request_error': 'We could not complete the request. Please try again.',
     'error.internal_error': 'Something went wrong on our side. Please try again.',
     'error.unauthorized': 'Please sign in again to continue.',
+    'error.auth.forbidden': 'You do not have access to this resource.',
     'error.salon_required': 'Please complete salon setup first.',
     'error.salon_forbidden': 'You do not have access to this salon.',
     'error.business_hours_invalid': 'Start time must be before end time.',
@@ -248,6 +260,17 @@ export const copy = {
     'error.service_not_found': 'Service was not found.',
     'error.customer_not_found': 'Customer was not found.',
     'error.customer_required': 'Add a customer before booking.',
+    'error.booking.invalid_reference': 'Staff or service reference is invalid.',
+    'error.booking.staff_not_assigned_to_service': 'Selected staff cannot perform this service.',
+    'error.booking.duration_mismatch': 'Selected time does not match service duration.',
+    'error.booking.invalid_time_range': 'Selected time is invalid.',
+    'error.booking.invalid_time_alignment': 'Start time must be on a 15-minute grid.',
+    'error.booking.outside_business_hours': 'Selected time is outside business hours.',
+    'error.booking.time_not_available': 'Selected time is no longer available.',
+    'error.booking.customer_required': 'Add a customer before booking.',
+    'error.booking.not_found': 'Booking was not found.',
+    'error.booking.cannot_cancel': 'This booking cannot be cancelled.',
+    'error.booking.cannot_reschedule': 'This booking cannot be rescheduled.',
     'error.booking_not_found': 'Booking was not found.',
     'error.availability.invalid_query': 'Availability query is invalid.',
     'error.availability.service_not_found': 'Service was not found.',

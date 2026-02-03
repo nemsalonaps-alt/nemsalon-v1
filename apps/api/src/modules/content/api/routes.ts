@@ -7,11 +7,12 @@ import { httpError } from '../../../server/http-error.js';
 
 const bookingCreateSchema = z
   .object({
-    salonId: z.string().uuid(),
     serviceId: z.string().uuid(),
     staffId: z.string().uuid(),
-    startTime: z.string().datetime(),
+    startTime: z.string().datetime().optional(),
+    startUtc: z.string().datetime().optional(),
     endTime: z.string().datetime().optional(),
+    endUtc: z.string().datetime().optional(),
     notes: z.string().optional(),
     customerId: z.string().uuid().optional(),
     customer: z
@@ -24,6 +25,12 @@ const bookingCreateSchema = z
       .optional()
   })
   .superRefine((value, ctx) => {
+    if (!value.startTime && !value.startUtc) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Provide startTime or startUtc.'
+      });
+    }
     if (!value.customerId && !value.customer) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -70,6 +77,18 @@ export function registerContentRoutes(app: FastifyInstance) {
 
   const staffServicesAssignSchema = z.object({
     serviceIds: z.array(z.string().uuid()).min(1)
+  });
+
+  const bookingCancelSchema = z
+    .object({
+      reasonKey: z.string().min(1).optional(),
+      note: z.string().min(1).optional()
+    })
+    .default({});
+
+  const bookingRescheduleSchema = z.object({
+    staffId: z.string().uuid(),
+    startUtc: z.string().datetime()
   });
 
   app.get('/v1/salons/:salonId', async (request, reply) => {
@@ -207,10 +226,16 @@ export function registerContentRoutes(app: FastifyInstance) {
   app.post('/v1/bookings', async (request, reply) => {
     const body = bookingCreateSchema.parse(request.body);
     const salonId = await authService.requirePrimarySalonId(request);
-    if (body.salonId !== salonId) {
-      throw httpError(403, 'SALON_FORBIDDEN', 'You do not have access to this salon.');
-    }
-    const booking = await contentService.createBooking(body);
+    const booking = await contentService.createBooking({
+      salonId,
+      serviceId: body.serviceId,
+      staffId: body.staffId,
+      startTime: body.startUtc ?? body.startTime ?? '',
+      endTime: body.endUtc ?? body.endTime,
+      notes: body.notes,
+      customerId: body.customerId,
+      customer: body.customer
+    });
     reply.code(201).send(booking);
   });
 
@@ -227,5 +252,31 @@ export function registerContentRoutes(app: FastifyInstance) {
   app.patch('/v1/bookings/:bookingId', async (request, reply) => {
     await authService.requirePrimarySalonId(request);
     return notImplemented(reply, request, 'Update booking not implemented');
+  });
+
+  app.post('/v1/bookings/:bookingId/cancel', async (request, reply) => {
+    const params = z.object({ bookingId: z.string().uuid() }).parse(request.params);
+    const body = bookingCancelSchema.parse(request.body);
+    const booking = await contentService.getBooking(params.bookingId);
+    await authService.requireSalonRole(request, booking.salonId, ['owner']);
+    const cancelled = await contentService.cancelBooking({
+      bookingId: params.bookingId,
+      reasonKey: body.reasonKey,
+      note: body.note
+    });
+    reply.code(200).send({ booking: cancelled });
+  });
+
+  app.post('/v1/bookings/:bookingId/reschedule', async (request, reply) => {
+    const params = z.object({ bookingId: z.string().uuid() }).parse(request.params);
+    const body = bookingRescheduleSchema.parse(request.body);
+    const booking = await contentService.getBooking(params.bookingId);
+    await authService.requireSalonRole(request, booking.salonId, ['owner']);
+    const updated = await contentService.rescheduleBooking({
+      bookingId: params.bookingId,
+      staffId: body.staffId,
+      startTime: body.startUtc
+    });
+    reply.code(200).send({ booking: updated });
   });
 }

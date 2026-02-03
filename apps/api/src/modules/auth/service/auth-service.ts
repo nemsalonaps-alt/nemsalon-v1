@@ -93,5 +93,17 @@ export const authService = {
       throw httpError(403, 'SALON_REQUIRED', 'No primary salon found for user.');
     }
     return record.primarySalonId;
+  },
+  async requireSalonRole(
+    request: FastifyRequest,
+    salonId: string,
+    roles: Array<'owner' | 'admin' | 'staff'>
+  ): Promise<void> {
+    const { user } = await this.resolveAuthUser(request);
+    const memberships = await authRepo.getMembershipsByUserId(user.id);
+    const membership = memberships.find((entry) => entry.salonId === salonId && entry.active);
+    if (!membership || !roles.includes(membership.role)) {
+      throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
+    }
   }
 };

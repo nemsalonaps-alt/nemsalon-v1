@@ -10,7 +10,9 @@ import type {
 import {
   createBooking as createBookingRepo,
   getBookingById,
-  updateBookingStatus as updateBookingStatusRepo
+  updateBookingStatus as updateBookingStatusRepo,
+  updateBookingSchedule as updateBookingScheduleRepo,
+  cancelBooking as cancelBookingRepo
 } from '../repo/booking-repo.js';
 import { getSalonBusinessHours, replaceSalonBusinessHours } from '../repo/business-hours-repo.js';
 import { createCustomer, getCustomerById } from '../repo/customer-repo.js';
@@ -159,51 +161,65 @@ export const contentService = {
   async createBooking(input: CreateBookingInput): Promise<Booking> {
     const start = new Date(input.startTime);
     if (Number.isNaN(start.valueOf())) {
-      throw httpError(400, 'INVALID_TIME_FORMAT', 'startTime is invalid.');
+      throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
     }
 
     const service = await getServiceById(input.serviceId);
     if (!service) {
-      throw httpError(404, 'SERVICE_NOT_FOUND', 'Service not found.');
+      throw httpError(404, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference');
     }
-    if (service.salonId !== input.salonId) {
-      throw httpError(400, 'SERVICE_SALON_MISMATCH', 'Service does not belong to this salon.');
-    }
-
     const staff = await getStaffById(input.staffId);
     if (!staff) {
-      throw httpError(404, 'STAFF_NOT_FOUND', 'Staff member not found.');
+      throw httpError(404, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference');
     }
-    if (staff.salonId !== input.salonId) {
-      throw httpError(400, 'STAFF_SALON_MISMATCH', 'Staff member does not belong to this salon.');
+
+    if (service.salonId !== input.salonId || staff.salonId !== input.salonId) {
+      throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
     }
 
     const staffServiceIds = await getStaffServiceIds(input.staffId);
     if (!staffServiceIds.includes(input.serviceId)) {
-      throw httpError(400, 'STAFF_SERVICE_MISMATCH', 'Staff member cannot perform this service.');
+      throw httpError(
+        400,
+        'BOOKING_STAFF_NOT_ASSIGNED',
+        'error.booking.staff_not_assigned_to_service'
+      );
     }
 
     const serviceDuration = service.durationMinutes + (service.bufferMinutes ?? 0);
+    if (serviceDuration <= 0) {
+      throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
+    }
     const computedEnd = new Date(start.getTime() + serviceDuration * 60_000);
+    if (computedEnd <= start) {
+      throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
+    }
     if (input.endTime) {
       const providedEnd = new Date(input.endTime);
       if (Number.isNaN(providedEnd.valueOf())) {
-        throw httpError(400, 'INVALID_TIME_FORMAT', 'endTime is invalid.');
+        throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
       }
-      const diff = Math.abs(providedEnd.getTime() - computedEnd.getTime());
-      if (diff > 60_000) {
-        throw httpError(400, 'END_TIME_MISMATCH', 'endTime must match service duration.');
+      if (providedEnd.getTime() !== computedEnd.getTime()) {
+        throw httpError(400, 'BOOKING_DURATION_MISMATCH', 'error.booking.duration_mismatch');
       }
     }
+
+    const salon = await getSalonById(input.salonId);
+    if (!salon) {
+      throw httpError(404, 'SALON_NOT_FOUND', 'error.salon_not_found');
+    }
+    assertAlignedToInterval(start, 15, salon.timezone);
+    const weekly = await getSalonBusinessHours(input.salonId);
+    assertWithinBusinessHours(start, computedEnd, weekly, salon.timezone);
 
     let customerId = input.customerId;
     if (customerId) {
       const existingCustomer = await getCustomerById(customerId);
       if (!existingCustomer) {
-        throw httpError(404, 'CUSTOMER_NOT_FOUND', 'Customer not found.');
+        throw httpError(404, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference');
       }
       if (existingCustomer.salonId !== input.salonId) {
-        throw httpError(400, 'CUSTOMER_SALON_MISMATCH', 'Customer does not belong to this salon.');
+        throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
       }
     } else if (input.customer) {
       const created = await createCustomer({
@@ -215,7 +231,7 @@ export const contentService = {
       });
       customerId = created.id;
     } else {
-      throw httpError(400, 'CUSTOMER_REQUIRED', 'Provide customerId or customer details.');
+      throw httpError(400, 'BOOKING_CUSTOMER_REQUIRED', 'error.booking.customer_required');
     }
 
     if (!customerId) {
@@ -239,7 +255,7 @@ export const contentService = {
   async getBooking(bookingId: string): Promise<Booking> {
     const booking = await getBookingById(bookingId);
     if (!booking) {
-      throw httpError(404, 'BOOKING_NOT_FOUND', 'Booking not found.');
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
     }
     return booking;
   },
@@ -247,8 +263,233 @@ export const contentService = {
   async updateBookingStatus(bookingId: string, status: BookingStatus): Promise<Booking> {
     const booking = await updateBookingStatusRepo(bookingId, status);
     if (!booking) {
-      throw httpError(404, 'BOOKING_NOT_FOUND', 'Booking not found.');
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
     }
     return booking;
+  },
+
+  async cancelBooking(input: {
+    bookingId: string;
+    reasonKey?: string;
+    note?: string;
+  }): Promise<Booking> {
+    const booking = await getBookingById(input.bookingId);
+    if (!booking) {
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    if (booking.status === 'cancelled') {
+      return booking;
+    }
+    if (!['pending', 'confirmed'].includes(booking.status)) {
+      throw httpError(400, 'BOOKING_CANNOT_CANCEL', 'error.booking.cannot_cancel');
+    }
+    const updated = await cancelBookingRepo({
+      bookingId: input.bookingId,
+      reasonKey: input.reasonKey,
+      note: input.note
+    });
+    if (!updated) {
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    return updated;
+  },
+
+  async rescheduleBooking(input: {
+    bookingId: string;
+    staffId: string;
+    startTime: string;
+  }): Promise<Booking> {
+    const booking = await getBookingById(input.bookingId);
+    if (!booking) {
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    if (!['pending', 'confirmed'].includes(booking.status)) {
+      throw httpError(400, 'BOOKING_CANNOT_RESCHEDULE', 'error.booking.cannot_reschedule');
+    }
+
+    const service = await getServiceById(booking.serviceId);
+    if (!service) {
+      throw httpError(404, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference');
+    }
+
+    const staff = await getStaffById(input.staffId);
+    if (!staff) {
+      throw httpError(404, 'BOOKING_INVALID_REFERENCE', 'error.booking.invalid_reference');
+    }
+    if (staff.salonId !== booking.salonId || service.salonId !== booking.salonId) {
+      throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
+    }
+
+    const staffServiceIds = await getStaffServiceIds(input.staffId);
+    if (!staffServiceIds.includes(booking.serviceId)) {
+      throw httpError(
+        400,
+        'BOOKING_STAFF_NOT_ASSIGNED',
+        'error.booking.staff_not_assigned_to_service'
+      );
+    }
+
+    const start = new Date(input.startTime);
+    if (Number.isNaN(start.valueOf())) {
+      throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
+    }
+
+    const serviceDuration = service.durationMinutes + (service.bufferMinutes ?? 0);
+    if (serviceDuration <= 0) {
+      throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
+    }
+    const computedEnd = new Date(start.getTime() + serviceDuration * 60_000);
+    if (computedEnd <= start) {
+      throw httpError(400, 'BOOKING_INVALID_TIME', 'error.booking.invalid_time_range');
+    }
+
+    const salon = await getSalonById(booking.salonId);
+    if (!salon) {
+      throw httpError(404, 'SALON_NOT_FOUND', 'error.salon_not_found');
+    }
+    assertAlignedToInterval(start, 15, salon.timezone);
+    const weekly = await getSalonBusinessHours(booking.salonId);
+    assertWithinBusinessHours(start, computedEnd, weekly, salon.timezone);
+
+    const updated = await updateBookingScheduleRepo({
+      bookingId: booking.id,
+      staffId: input.staffId,
+      startTime: start.toISOString(),
+      endTime: computedEnd.toISOString()
+    });
+    if (!updated) {
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    return updated;
   }
 };
+
+type LocalParts = {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+};
+
+type WeeklyEntry = {
+  enabled: boolean;
+  startMinutes: number;
+  endMinutes: number;
+};
+
+function assertWithinBusinessHours(
+  start: Date,
+  end: Date,
+  weekly: BusinessHoursEntry[],
+  timeZone: string
+) {
+  if (!weekly.length) {
+    throw httpError(400, 'BOOKING_OUTSIDE_BUSINESS_HOURS', 'error.booking.outside_business_hours');
+  }
+
+  const weeklyMap = buildWeeklyMap(weekly);
+  const startParts = getLocalParts(start, timeZone);
+  const endParts = getLocalParts(end, timeZone);
+  if (
+    startParts.year !== endParts.year ||
+    startParts.month !== endParts.month ||
+    startParts.day !== endParts.day
+  ) {
+    throw httpError(400, 'BOOKING_OUTSIDE_BUSINESS_HOURS', 'error.booking.outside_business_hours');
+  }
+
+  const weekday = getWeekdayId(start, timeZone);
+  const entry = weeklyMap[weekday];
+  if (!entry || !entry.enabled || entry.startMinutes >= entry.endMinutes) {
+    throw httpError(400, 'BOOKING_OUTSIDE_BUSINESS_HOURS', 'error.booking.outside_business_hours');
+  }
+
+  const startMinutes = toMinutesOfDay(startParts);
+  const endMinutes = toMinutesOfDay(endParts);
+  if (startMinutes < entry.startMinutes || endMinutes > entry.endMinutes) {
+    throw httpError(400, 'BOOKING_OUTSIDE_BUSINESS_HOURS', 'error.booking.outside_business_hours');
+  }
+}
+
+function assertAlignedToInterval(date: Date, intervalMinutes: number, timeZone: string) {
+  const parts = getLocalParts(date, timeZone);
+  const minutes = toMinutesOfDay(parts);
+  const isAligned = parts.second === 0 && Math.abs(minutes % intervalMinutes) < 0.001;
+  if (!isAligned) {
+    throw httpError(400, 'BOOKING_INVALID_TIME_ALIGNMENT', 'error.booking.invalid_time_alignment');
+  }
+}
+
+function buildWeeklyMap(weekly: BusinessHoursEntry[]): Record<string, WeeklyEntry> {
+  const map: Record<string, WeeklyEntry> = {};
+  for (const entry of weekly) {
+    const startMinutes = parseTime(entry.startTime);
+    const endMinutes = parseTime(entry.endTime);
+    if (startMinutes === null || endMinutes === null) {
+      continue;
+    }
+    map[entry.day] = {
+      enabled: entry.enabled,
+      startMinutes,
+      endMinutes
+    };
+  }
+  return map;
+}
+
+function parseTime(value: string): number | null {
+  const match = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?$/.exec(value);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const seconds = match[3] ? Number(match[3]) : 0;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
+    return null;
+  }
+  return hours * 60 + minutes + seconds / 60;
+}
+
+function getLocalParts(date: Date, timeZone: string): LocalParts {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  });
+  const parts = formatter.formatToParts(date);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return {
+    year: value('year'),
+    month: value('month'),
+    day: value('day'),
+    hour: value('hour'),
+    minute: value('minute'),
+    second: value('second')
+  };
+}
+
+function toMinutesOfDay(parts: LocalParts) {
+  return parts.hour * 60 + parts.minute + parts.second / 60;
+}
+
+function getWeekdayId(date: Date, timeZone: string): BusinessHoursEntry['day'] {
+  const formatter = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' });
+  const short = formatter.format(date);
+  return (
+    {
+      Mon: 'mon',
+      Tue: 'tue',
+      Wed: 'wed',
+      Thu: 'thu',
+      Fri: 'fri',
+      Sat: 'sat',
+      Sun: 'sun'
+    }[short] ?? 'mon'
+  );
+}
