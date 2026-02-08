@@ -4,7 +4,12 @@
     "composite": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "fastify": ["../../node_modules/fastify"],
+      "*": ["../../node_modules/*"]
+    }
   },
-  "include": ["src"]
+  "include": ["src/**/*"]
 }

@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { BookingForm } from '../types';
-import { copy } from '../copy';
+import { getCopy } from '../copy';
+import { ConfirmDialog } from '@nemsalon/ui';
 
 type SlotOption = {
   startUtc: string;
@@ -35,6 +37,8 @@ type FirstBookingCTAProps = {
   onCreateBooking: () => void;
   onBack: () => void;
   onFixAssignments: () => void;
+  onFinishOnboarding: () => void;
+  finishingOnboarding?: boolean;
 };
 
 export function FirstBookingCTA({
@@ -63,12 +67,39 @@ export function FirstBookingCTA({
   onBookingChange,
   onCreateBooking,
   onBack,
-  onFixAssignments
+  onFixAssignments,
+  onFinishOnboarding,
+  finishingOnboarding
 }: FirstBookingCTAProps) {
+  const copy = getCopy();
+  const [confirmState, setConfirmState] = useState<{
+    title: string;
+    body: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    onConfirm: () => void;
+  } | null>(null);
   const heroSalon = salonName || copy.cta.fallback.salon;
   const heroStaff = staffName || copy.cta.fallback.staff;
   const heroService = serviceName || copy.cta.fallback.service;
   const heroSummary = copy.format.heroSummary(heroSalon, heroStaff, heroService);
+
+  function closeConfirm() {
+    setConfirmState(null);
+  }
+
+  function confirmAction(
+    state: Omit<NonNullable<typeof confirmState>, 'onConfirm'>,
+    action: () => void
+  ) {
+    setConfirmState({
+      ...state,
+      onConfirm: () => {
+        closeConfirm();
+        action();
+      }
+    });
+  }
 
   return (
     <section className="panel">
@@ -266,7 +297,17 @@ export function FirstBookingCTA({
           <h4>{copy.cta.manage.title}</h4>
           <p>{copy.cta.manage.body}</p>
           <div className="btn-row">
-            <button className="btn ghost" type="button" onClick={onCancelBooking} disabled={manageBusy}>
+            <button
+              className="btn ghost"
+              type="button"
+              onClick={() =>
+                confirmAction(
+                  { title: 'Annuller booking', body: 'Er du sikker på, at du vil annullere denne booking?' },
+                  onCancelBooking
+                )
+              }
+              disabled={manageBusy}
+            >
               {manageBusy ? copy.cta.actions.cancelling : copy.cta.actions.cancel}
             </button>
           </div>
@@ -279,7 +320,15 @@ export function FirstBookingCTA({
                 key={`reschedule-${slot.staffId}-${slot.startUtc}`}
                 className="btn subtle"
                 type="button"
-                onClick={() => onReschedule(slot)}
+                onClick={() =>
+                  confirmAction(
+                    {
+                      title: 'Reschedule booking',
+                      body: `Flyt til ${slot.label}?`
+                    },
+                    () => onReschedule(slot)
+                  )
+                }
                 disabled={manageBusy}
               >
                 {copy.cta.actions.reschedule}: {slot.label}
@@ -290,6 +339,29 @@ export function FirstBookingCTA({
           {manageSuccess && <div className="banner success" style={{ marginTop: 12 }}>{manageSuccess}</div>}
         </div>
       )}
+
+      <div className="panel" style={{ marginTop: 24, borderColor: 'var(--accent)' }}>
+        <h4>Gå til Owner Console</h4>
+        <p>Du er klar til at bruge Owner Console. Afslut onboarding for at fortsætte.</p>
+        <button
+          className="btn primary"
+          type="button"
+          onClick={onFinishOnboarding}
+          disabled={finishingOnboarding}
+        >
+          {finishingOnboarding ? 'Afslutter...' : 'Afslut onboarding'}
+        </button>
+      </div>
+
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title ?? ''}
+        body={confirmState?.body ?? ''}
+        confirmLabel={confirmState?.confirmLabel}
+        cancelLabel={confirmState?.cancelLabel}
+        onConfirm={() => confirmState?.onConfirm()}
+        onCancel={closeConfirm}
+      />
     </section>
   );
 }

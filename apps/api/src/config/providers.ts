@@ -7,10 +7,6 @@ export const providers = {
       enabled: Boolean(env.STRIPE_SECRET_KEY),
       requireConfig: () =>
         requireEnv(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'], 'Stripe is not configured')
-    },
-    mobilepay: {
-      name: 'mobilepay',
-      enabled: Boolean(env.MOBILEPAY_CLIENT_ID && env.MOBILEPAY_CLIENT_SECRET)
     }
   },
   notifications: {

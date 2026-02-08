@@ -82,7 +82,6 @@ Source of truth for scope: README.md (Project Constitution).
   - Empty state
   - Error boundary
   - Mobile layout + navigation
-  - MobilePay QR modal (if payments use MobilePay)
 - Reference mapping: nemsalon/src/components-new/mobile-wrappers/README.md
 
 ## 10) First week plan (no fluff)
@@ -108,7 +107,7 @@ Day 5
 - Staging deploy running
 
 ## 11) Decision log (confirm)
-- Payment provider: Stripe + MobilePay (Stripe default i golden path).
+ - Payment provider: Stripe.
 - SMS provider: Twilio.
 - Email provider: Postmark.
 - Push provider: FCM.

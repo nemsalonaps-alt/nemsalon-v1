@@ -1,4 +1,4 @@
-import { copy } from '../copy';
+import { getCopy } from '../copy';
 
 type AssignServicesProps = {
   assignService: boolean;
@@ -7,6 +7,7 @@ type AssignServicesProps = {
 };
 
 export function AssignServices({ assignService, error, onToggle }: AssignServicesProps) {
+  const copy = getCopy();
   return (
     <div className="panel">
       <label className="toggle" style={{ marginTop: 18 }}>

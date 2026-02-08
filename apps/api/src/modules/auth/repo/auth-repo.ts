@@ -18,11 +18,14 @@ type MembershipRow = {
   salons?: {
     id: string;
     name: string;
+    slug: string | null;
     status: string;
     locale: string;
+    salon_type: string | null;
     currency: string;
     timezone: string;
-  } | null;
+    cancellation_window_minutes: number;
+  }[] | null;
 };
 
 export const authRepo = {
@@ -99,7 +102,7 @@ export const authRepo = {
     const { data, error } = await client
       .from('memberships')
       .select(
-        'id, salon_id, role, active, salons(id, name, status, locale, currency, timezone)'
+        'id, salon_id, role, active, salons(id, name, slug, status, locale, salon_type, currency, timezone, cancellation_window_minutes)'
       )
       .eq('user_id', userId);
 
@@ -107,7 +110,7 @@ export const authRepo = {
       throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
     }
 
-    return (data ?? []).map((row) => mapMembershipRow(row as MembershipRow));
+    return (data ?? []).map((row) => mapMembershipRow(row as unknown as MembershipRow));
   },
 
   async setPrimarySalon(userId: string, salonId: string): Promise<void> {
@@ -116,6 +119,43 @@ export const authRepo = {
       .from('users')
       .update({ primary_salon_id: salonId })
       .eq('id', userId);
+
+    if (error) {
+      throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+    }
+  },
+
+  async setPrimarySalonIfMissing(userId: string, salonId: string): Promise<void> {
+    const client = getSupabaseClient();
+    const { error } = await client
+      .from('users')
+      .update({ primary_salon_id: salonId })
+      .eq('id', userId)
+      .is('primary_salon_id', null);
+
+    if (error) {
+      throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+    }
+  },
+
+  async upsertMembership(input: {
+    salonId: string;
+    userId: string;
+    role: Membership['role'];
+    active?: boolean;
+  }): Promise<void> {
+    const client = getSupabaseClient();
+    const { error } = await client
+      .from('memberships')
+      .upsert(
+        {
+          salon_id: input.salonId,
+          user_id: input.userId,
+          role: input.role,
+          active: input.active ?? true
+        },
+        { onConflict: 'salon_id,user_id' }
+      );
 
     if (error) {
       throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
@@ -134,19 +174,23 @@ function mapUserRow(row: UserRow): AuthUser {
 }
 
 function mapMembershipRow(row: MembershipRow): Membership {
+  const salon = row.salons?.[0];
   return {
     id: row.id,
     salonId: row.salon_id,
     role: row.role as Membership['role'],
     active: row.active,
-    salon: row.salons
+    salon: salon
       ? {
-          id: row.salons.id,
-          name: row.salons.name,
-          status: row.salons.status as 'draft' | 'active' | undefined,
-          locale: row.salons.locale,
-          currency: row.salons.currency,
-          timezone: row.salons.timezone
+          id: salon.id,
+          name: salon.name,
+          slug: salon.slug,
+          status: salon.status as 'draft' | 'active' | undefined,
+          locale: salon.locale,
+          salonType: salon.salon_type,
+          currency: salon.currency,
+          timezone: salon.timezone,
+          cancellationWindowMinutes: salon.cancellation_window_minutes
         }
       : undefined
   };

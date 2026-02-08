@@ -21,6 +21,9 @@ Må ikke bygges endnu:
 - Kompleks lagerstyring.
 - Realtime kollaboration eller offline-first.
 
+**Explicitly not in V1**
+- MobilePay (Stripe-only i v1).
+
 **Non-goals**
 - Ingen microservices i v1.
 - Ingen "feature factory" før kerneflow er solidt.
@@ -39,7 +42,7 @@ Må ikke bygges endnu:
 - GDPR: Ja (samtykke, sletning, eksport, audit-log).
 
 **Providers (låst for v1)**
-- Betaling: Stripe + MobilePay (Stripe er default i golden path).
+- Betaling: Stripe.
 - SMS: Twilio.
 - Email: Postmark.
 - Push: FCM (device registry nu, udsendelse senere).
@@ -60,6 +63,7 @@ pnpm supabase:start
 pnpm supabase:migrate
 pnpm generate:sdk
 pnpm test
+pnpm dev:worker
 pnpm supabase:stop
 ```
 
@@ -76,6 +80,7 @@ pnpm supabase:stop
 **Env (lokalt)**
 - Web læser `VITE_*` fra repo root `.env.local`.
 - API læser `.env` og `.env.local` fra repo root (via dotenv).
+- `VITE_PUBLIC_APP_URL` kan sættes for public booking links (fallback = browser origin).
 
 **Env vars (server)**
 - STRIPE_SECRET_KEY
@@ -89,9 +94,30 @@ pnpm supabase:stop
 - SUPABASE_ANON_KEY
 - SUPABASE_SERVICE_ROLE_KEY
 - FCM_SERVICE_ACCOUNT_JSON (placeholder)
-- MOBILEPAY_CLIENT_ID (placeholder)
-- MOBILEPAY_CLIENT_SECRET (placeholder)
-- MOBILEPAY_SUBSCRIPTION_KEY (placeholder)
-- MOBILEPAY_WEBHOOK_SECRET (placeholder)
+- PLATFORM_ADMIN_EMAILS (comma-separated allowlist)
+- PLATFORM_ADMIN_TOKEN (shared token for internal tools)
+- PUBLIC_APP_URL (allowed return URL base for public checkout redirects)
+- FEATURE_AVAILABILITY (set to false to disable)
+- FEATURE_NOTIFICATIONS (set to false to disable)
+
+**Platform admin (intern ops)**
+Platform admin er et separat spor fra owner/admin/staff. Det er kun til support/ops og har sit eget namespace.
+
+Auth (v1):
+- Allowlist via `PLATFORM_ADMIN_EMAILS` (comma-separated emails), eller
+- Shared token via header `x-platform-admin-token` = `PLATFORM_ADMIN_TOKEN`
+
+API namespace (read-only v1):
+- `GET /v1/platform/salons`
+- `GET /v1/platform/salons/:salonId`
+- `GET /v1/platform/salons/:salonId/bookings`
+- `GET /v1/platform/salons/:salonId/payments`
+- `GET /v1/platform/audit`
+
+Alle platform-admin kald audit-logges med action `platform.read`.
+
+**Ops docs**
+- `docs/ops/analytics.md` (events + error queries)
+- `docs/ops/backup-restore.md` (backup/restore checklist)
 
 Når du bliver i tvivl, kigger du her.

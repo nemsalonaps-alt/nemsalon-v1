@@ -1,62 +1,35 @@
-import { copy } from './copy';
+import { getCopy, resolveLocale } from './copy';
 import type { BookingForm, SalonForm, ServiceForm, StaffForm, WeeklyHours } from './types';
+import {
+  timeToMinutes,
+  addMinutes,
+  parsePrice,
+  toMinorUnits,
+} from '@nemsalon/shared';
+import { RoleOptions, BufferOptions, DefaultBusinessHours, DefaultCurrencyForLocale } from '@nemsalon/shared';
 
-export const dayLabels: Record<WeeklyHours['day'], string> = copy.dayLabels;
+export const getDayLabels = (locale?: string) => getCopy(locale).dayLabels;
 
-export const roleOptions = ['owner', 'admin', 'staff'] as const;
-export const bufferOptions = [0, 5, 10, 15];
-
-export const defaultWeeklyHours: WeeklyHours[] = [
-  { day: 'mon', enabled: true, start: '09:00', end: '17:00' },
-  { day: 'tue', enabled: true, start: '09:00', end: '17:00' },
-  { day: 'wed', enabled: true, start: '09:00', end: '17:00' },
-  { day: 'thu', enabled: true, start: '09:00', end: '17:00' },
-  { day: 'fri', enabled: true, start: '09:00', end: '17:00' },
-  { day: 'sat', enabled: false, start: '09:00', end: '17:00' },
-  { day: 'sun', enabled: false, start: '09:00', end: '17:00' }
-];
+// Re-export constants from shared package
+export { RoleOptions as roleOptions, BufferOptions as bufferOptions, DefaultBusinessHours as defaultWeeklyHours };
 
 export const getBrowserTimezone = () =>
   typeof Intl !== 'undefined'
     ? Intl.DateTimeFormat().resolvedOptions().timeZone
-    : copy.salon.fields.timezonePlaceholder;
+    : getCopy().salon.fields.timezonePlaceholder;
 
 export const getBrowserLocale = () =>
   typeof navigator !== 'undefined' ? navigator.language : 'en';
 
-export const normalizeLocale = (locale: string) => (locale.startsWith('da') ? 'da' : 'en');
+export const normalizeLocale = (locale: string) => resolveLocale(locale);
 
-export const defaultCurrencyForLocale = (locale: string) => (locale === 'da' ? 'DKK' : 'EUR');
+export const defaultCurrencyForLocale = (locale: string) => DefaultCurrencyForLocale[locale] ?? 'EUR';
 
-export const timeToMinutes = (value: string) => {
-  const [h, m] = value.split(':').map((part) => Number(part));
-  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
-  return h * 60 + m;
-};
+// Re-export utilities from shared package
+export { timeToMinutes, addMinutes, parsePrice, toMinorUnits };
 
-export const addMinutes = (time: string, minutes: number) => {
-  if (!time) return '';
-  const [h, m] = time.split(':').map((part) => Number(part));
-  if (Number.isNaN(h) || Number.isNaN(m)) return '';
-  const total = h * 60 + m + minutes;
-  const nextH = Math.floor(total / 60) % 24;
-  const nextM = total % 60;
-  return `${String(nextH).padStart(2, '0')}:${String(nextM).padStart(2, '0')}`;
-};
-
-export const parsePrice = (value: string) => {
-  const normalized = value.replace(',', '.').replace(/[^0-9.]/g, '');
-  if (!normalized) return Number.NaN;
-  return Number(normalized);
-};
-
-export const toMinorUnits = (value: string) => {
-  const parsed = parsePrice(value);
-  if (Number.isNaN(parsed)) return Number.NaN;
-  return Math.round(parsed * 100);
-};
-
-export const validateWeeklyHours = (hours: WeeklyHours[]) => {
+export const validateWeeklyHours = (hours: WeeklyHours[], locale?: string) => {
+  const copy = getCopy(locale);
   const enabledDays = hours.filter((item) => item.enabled);
   if (enabledDays.length === 0) return copy.validation.hours.noDays;
   const invalid = enabledDays.find((item) => timeToMinutes(item.start) >= timeToMinutes(item.end));
@@ -65,6 +38,7 @@ export const validateWeeklyHours = (hours: WeeklyHours[]) => {
 };
 
 export const validateSalon = (form: SalonForm, weekly: WeeklyHours[]) => {
+  const copy = getCopy(form.locale);
   const errors: Record<string, string> = {};
   if (form.name.trim().length < 2 || form.name.trim().length > 60) {
     errors.name = copy.validation.salon.name;
@@ -75,10 +49,13 @@ export const validateSalon = (form: SalonForm, weekly: WeeklyHours[]) => {
   if (!form.locale.trim()) {
     errors.locale = copy.validation.salon.locale;
   }
+  if (!form.salonType) {
+    errors.salonType = copy.validation.salon.type;
+  }
   if (!form.currency.trim()) {
     errors.currency = copy.validation.salon.currency;
   }
-  const hoursError = validateWeeklyHours(weekly);
+  const hoursError = validateWeeklyHours(weekly, form.locale);
   if (hoursError) errors.hours = hoursError;
   return errors;
 };
@@ -87,17 +64,22 @@ export const validateStaffAndService = (
   staff: StaffForm,
   staffHours: WeeklyHours[],
   service: ServiceForm,
-  assignService: boolean
+  assignService: boolean,
+  locale?: string
 ) => {
+  const copy = getCopy(locale);
   const errors: Record<string, string> = {};
   if (staff.name.trim().length < 2 || staff.name.trim().length > 60) {
     errors.staffName = copy.validation.staff.name;
   }
-  if (!roleOptions.includes(staff.role)) {
+  if (!RoleOptions.includes(staff.role)) {
     errors.staffRole = copy.validation.staff.role;
   }
+  if (staff.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staff.email)) {
+    errors.staffEmail = copy.validation.staff.email;
+  }
   if (!staff.sameHours) {
-    const hoursError = validateWeeklyHours(staffHours);
+    const hoursError = validateWeeklyHours(staffHours, locale);
     if (hoursError) errors.staffHours = hoursError;
   }
   if (service.name.trim().length < 2 || service.name.trim().length > 60) {
@@ -111,7 +93,7 @@ export const validateStaffAndService = (
   if (Number.isNaN(priceValue) || priceValue <= 0) {
     errors.servicePrice = copy.validation.staff.servicePrice;
   }
-  if (!bufferOptions.includes(service.bufferMinutes)) {
+  if (!BufferOptions.includes(service.bufferMinutes)) {
     errors.serviceBuffer = copy.validation.staff.serviceBuffer;
   }
   if (!assignService) {
@@ -123,8 +105,10 @@ export const validateStaffAndService = (
 export const validateBooking = (
   booking: BookingForm,
   salonId: string | null,
-  assignService: boolean
+  assignService: boolean,
+  locale?: string
 ) => {
+  const copy = getCopy(locale);
   const errors: Record<string, string> = {};
   if (booking.customerName.trim().length < 2) {
     errors.customerName = copy.validation.booking.customerName;

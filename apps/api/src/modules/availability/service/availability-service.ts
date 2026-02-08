@@ -1,16 +1,17 @@
 import { httpError } from '../../../server/http-error.js';
 import type { AvailabilityResponse, AvailabilitySlot } from '../domain/availability-domain.js';
-import { getSalonBusinessHours } from '../../content/repo/business-hours-repo.js';
-import { getBookingsForStaffInRange } from '../../content/repo/booking-repo.js';
-import { getSalonById } from '../../content/repo/salon-repo.js';
-import { getServiceById } from '../../content/repo/service-repo.js';
-import { getStaffById } from '../../content/repo/staff-repo.js';
 import {
-  getStaffIdsForService,
-  getStaffServiceIds
-} from '../../content/repo/staff-services-repo.js';
-import { createTimeZoneHelpers, parseTime, type LocalDate } from '../../../shared/timezone.js';
-import { listStaffTimeOff } from '../../content/repo/staff-time-off-repo.js';
+  getBusinessHours,
+  getStaffForService,
+  getServiceById,
+  getSalonById,
+  getStaffById,
+  canStaffPerformService,
+  getBookingsInRange,
+  getStaffWorkingHours,
+  getStaffTimeOff
+} from '../repo/availability-repo.js';
+import { createTimeZoneHelpers, parseTime } from '../../../shared/timezone.js';
 
 type AvailabilityQuery = {
   salonId: string;
@@ -71,8 +72,8 @@ export const availabilityService = {
       if (staff.salonId !== query.salonId) {
         throw httpError(403, 'SALON_FORBIDDEN', 'error.salon_forbidden');
       }
-      const staffServices = await getStaffServiceIds(query.staffId);
-      if (!staffServices.includes(query.serviceId)) {
+      const canPerform = await canStaffPerformService(query.staffId, query.serviceId);
+      if (!canPerform) {
         throw httpError(
           400,
           'AVAILABILITY_NO_STAFF_FOR_SERVICE',
@@ -81,7 +82,7 @@ export const availabilityService = {
       }
       staffIds = [query.staffId];
     } else {
-      staffIds = await getStaffIdsForService(query.serviceId, query.salonId);
+      staffIds = await getStaffForService(query.serviceId, query.salonId);
       if (staffIds.length === 0) {
         throw httpError(
           400,
@@ -91,9 +92,9 @@ export const availabilityService = {
       }
     }
 
-    const weekly = await getSalonBusinessHours(query.salonId);
-    const weeklyMap = buildWeeklyMap(weekly);
-    for (const entry of Object.values(weeklyMap)) {
+    const weekly = await getBusinessHours(query.salonId);
+    const salonWeeklyMap = buildWeeklyMap(weekly);
+    for (const entry of Object.values(salonWeeklyMap)) {
       if (entry.enabled && entry.startMinutes >= entry.endMinutes) {
         throw httpError(
           400,
@@ -104,12 +105,14 @@ export const availabilityService = {
     }
 
     const endDate = new Date(fromDate.getTime() + days * 24 * 60 * 60 * 1000);
-    const [bookings, timeOff] = await Promise.all([
-      getBookingsForStaffInRange(staffIds, fromDate.toISOString(), endDate.toISOString()),
-      listStaffTimeOff({ staffIds, fromUtc: fromDate.toISOString(), toUtc: endDate.toISOString() })
+    const [bookings, timeOff, staffWorkingHours] = await Promise.all([
+      getBookingsInRange(staffIds, fromDate.toISOString(), endDate.toISOString()),
+      getStaffTimeOff(staffIds, fromDate.toISOString(), endDate.toISOString()),
+      getStaffWorkingHours(staffIds)
     ]);
     const bookingsByStaff = mapBookingsByStaff(bookings);
     const timeOffByStaff = mapTimeOffByStaff(timeOff);
+    const staffHoursById = buildStaffWeeklyMaps(staffWorkingHours);
 
     const helpers = createTimeZoneHelpers(salon.timezone);
     const startLocalDate = helpers.getLocalDateParts(fromDate);
@@ -118,19 +121,23 @@ export const availabilityService = {
     for (let dayOffset = 0; dayOffset < days; dayOffset += 1) {
       const localDate = helpers.addLocalDays(startLocalDate, dayOffset);
       const weekday = helpers.getWeekdayId(localDate);
-      const hours = weeklyMap[weekday];
-      if (!hours || !hours.enabled) continue;
+      const salonHours = salonWeeklyMap[weekday];
+      if (!salonHours || !salonHours.enabled) continue;
 
-      for (
-        let startMinutes = hours.startMinutes;
-        startMinutes + totalDurationMinutes <= hours.endMinutes;
-        startMinutes += intervalMinutes
-      ) {
-        const slotStart = helpers.zonedTimeToUtc(localDate, startMinutes);
-        if (slotStart < fromDate) continue;
-        const slotEnd = new Date(slotStart.getTime() + totalDurationMinutes * 60_000);
+      for (const staffId of staffIds) {
+        const staffSchedule = staffHoursById.get(staffId);
+        const hours = resolveStaffHours(salonHours, staffSchedule?.weekly?.[weekday], staffSchedule?.hasCustom ?? false);
+        if (!hours || !hours.enabled) continue;
 
-        for (const staffId of staffIds) {
+        for (
+          let startMinutes = hours.startMinutes;
+          startMinutes + totalDurationMinutes <= hours.endMinutes;
+          startMinutes += intervalMinutes
+        ) {
+          const slotStart = helpers.zonedTimeToUtc(localDate, startMinutes);
+          if (slotStart < fromDate) continue;
+          const slotEnd = new Date(slotStart.getTime() + totalDurationMinutes * 60_000);
+
           const bookingWindows = bookingsByStaff.get(staffId) ?? [];
           const timeOffWindows = timeOffByStaff.get(staffId) ?? [];
           if (hasOverlap(slotStart, slotEnd, bookingWindows)) continue;
@@ -184,6 +191,11 @@ type WeeklyEntry = {
 
 type WeeklyMap = Record<string, WeeklyEntry>;
 
+type StaffWeekly = {
+  hasCustom: boolean;
+  weekly: WeeklyMap;
+};
+
 function buildWeeklyMap(weekly: { day: string; startTime: string; endTime: string; enabled: boolean }[]): WeeklyMap {
   const map: WeeklyMap = {};
   for (const entry of weekly) {
@@ -199,6 +211,40 @@ function buildWeeklyMap(weekly: { day: string; startTime: string; endTime: strin
     };
   }
   return map;
+}
+
+function buildStaffWeeklyMaps(
+  rows: Array<{ staffId: string; day: string; startTime: string; endTime: string; enabled: boolean }>
+): Map<string, StaffWeekly> {
+  const map = new Map<string, StaffWeekly>();
+  for (const row of rows) {
+    const entry = map.get(row.staffId) ?? { hasCustom: false, weekly: {} };
+    entry.hasCustom = true;
+    const startMinutes = parseTime(row.startTime);
+    const endMinutes = parseTime(row.endTime);
+    if (startMinutes === null || endMinutes === null) continue;
+    entry.weekly[row.day] = {
+      enabled: row.enabled,
+      startMinutes,
+      endMinutes
+    };
+    map.set(row.staffId, entry);
+  }
+  return map;
+}
+
+function resolveStaffHours(
+  salonHours: WeeklyEntry,
+  staffHours: WeeklyEntry | undefined,
+  hasCustom: boolean
+): WeeklyEntry | null {
+  if (!salonHours.enabled) return null;
+  if (!hasCustom) return salonHours;
+  if (!staffHours || !staffHours.enabled) return null;
+  const startMinutes = Math.max(salonHours.startMinutes, staffHours.startMinutes);
+  const endMinutes = Math.min(salonHours.endMinutes, staffHours.endMinutes);
+  if (startMinutes >= endMinutes) return null;
+  return { enabled: true, startMinutes, endMinutes };
 }
 
 function mapBookingsByStaff(rows: { staffId: string; startTime: string; endTime: string }[]): Map<string, BookingWindow[]> {

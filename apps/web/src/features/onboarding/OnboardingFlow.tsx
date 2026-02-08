@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   fetchMe,
+  trackEvent,
   updateSalon,
   setBusinessHours,
   createStaff,
   createService,
   assignStaffServices,
+  setStaffWorkingHours,
   fetchAvailabilitySlots,
   createBooking,
   createCheckout,
+  createBookingAccessToken,
   cancelBooking,
-  rescheduleBooking
+  rescheduleBooking,
+  activateSalon,
+  inviteStaff
 } from './api';
 import { Gate } from './pages/Gate';
 import { SalonStep } from './pages/SalonStep';
@@ -29,31 +34,34 @@ import type {
   DayId,
   AvailabilitySlot
 } from './types';
-import { copy } from './copy';
+import { getCopy, getStoredLocale, setStoredLocale } from './copy';
 import { onAuthStateChange } from '../../lib/auth';
 import {
   addMinutes,
   defaultCurrencyForLocale,
   defaultWeeklyHours,
-  getBrowserLocale,
   getBrowserTimezone,
-  normalizeLocale,
   toMinorUnits,
   validateBooking,
   validateSalon,
   validateStaffAndService
 } from './schema';
+import { buildBookingConfirmationUrl, buildBookingManageUrl } from '../../lib/public-url';
 
 export function OnboardingFlow() {
   const [gateState, setGateState] = useState<GateState>('checking');
   const [step, setStep] = useState<StepId>('salon');
   const [salonId, setSalonId] = useState<string | null>(null);
+  const [salonSlug, setSalonSlug] = useState<string | null>(null);
+  const [onboardingStarted, setOnboardingStarted] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
 
-  const initialLocale = normalizeLocale(getBrowserLocale());
+  const initialLocale = getStoredLocale();
   const [salon, setSalon] = useState<SalonForm>({
     name: '',
     timezone: getBrowserTimezone(),
     locale: initialLocale,
+    salonType: '',
     currency: defaultCurrencyForLocale(initialLocale)
   });
   const [currencyTouched, setCurrencyTouched] = useState(false);
@@ -103,12 +111,14 @@ export function OnboardingFlow() {
   const [manageError, setManageError] = useState('');
   const [manageSuccess, setManageSuccess] = useState('');
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+  const [finishingOnboarding, setFinishingOnboarding] = useState(false);
   const smsAvailable = false;
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState('');
+  const copy = getCopy(salon.locale);
 
-  const steps = useMemo(
+  const steps: { id: StepId; title: string; hint: string }[] = useMemo(
     () => [
       {
         id: 'salon',
@@ -131,8 +141,14 @@ export function OnboardingFlow() {
         hint: copy.stepper.steps.cta.hint
       }
     ],
-    []
+    [copy]
   );
+
+  useEffect(() => {
+    if (salon.locale) {
+      setStoredLocale(salon.locale);
+    }
+  }, [salon.locale]);
 
   useEffect(() => {
     if (gateState !== 'checking') return;
@@ -158,8 +174,10 @@ export function OnboardingFlow() {
           name: result.data.salon?.name ?? prev.name,
           timezone: result.data.salon?.timezone ?? prev.timezone,
           locale: result.data.salon?.locale ?? prev.locale,
+          salonType: result.data.salon?.salonType ?? prev.salonType,
           currency: result.data.salon?.currency ?? prev.currency
         }));
+        setSalonSlug(result.data.salon?.slug ?? null);
       }
       if (result.data.salon?.status === 'active') {
         setGateState('has-salon');
@@ -172,6 +190,15 @@ export function OnboardingFlow() {
       active = false;
     };
   }, [gateState]);
+
+  useEffect(() => {
+    if (step !== 'cta' || onboardingCompleted) return;
+    if (!salonId) return;
+    setOnboardingCompleted(true);
+    trackEvent('onboarding.completed', { salonId, salonType: salon.salonType || undefined }).catch(
+      () => {}
+    );
+  }, [step, onboardingCompleted, salonId]);
 
   useEffect(() => {
     const subscription = onAuthStateChange(() => {
@@ -252,7 +279,7 @@ export function OnboardingFlow() {
   };
 
   const updateHours = (
-    setter: (value: WeeklyHours[]) => void,
+    setter: React.Dispatch<React.SetStateAction<WeeklyHours[]>>,
     targetDay: DayId,
     patch: Partial<WeeklyHours>
   ) => {
@@ -291,17 +318,27 @@ export function OnboardingFlow() {
       setSalonApiError(updateResult.error);
       return;
     }
+    if (updateResult.data?.slug) {
+      setSalonSlug(updateResult.data.slug);
+    }
     const hoursResult = await setBusinessHours(salonId, weeklyHours);
     setSalonSaving(false);
     if (!hoursResult.ok) {
       setSalonApiError(hoursResult.error);
       return;
     }
+    if (!onboardingStarted) {
+      setOnboardingStarted(true);
+      trackEvent('onboarding.started', {
+        salonId,
+        salonType: salon.salonType || undefined
+      }).catch(() => {});
+    }
     setStep('staff');
   };
 
   const handleContinueStaff = async () => {
-    const errors = validateStaffAndService(staff, staffHours, service, assignService);
+    const errors = validateStaffAndService(staff, staffHours, service, assignService, salon.locale);
     setStaffErrors(errors);
     if (Object.keys(errors).length > 0) return;
     setStaffSaving(true);
@@ -312,6 +349,15 @@ export function OnboardingFlow() {
       setStaffSaving(false);
       setStaffApiError(staffResult.error);
       return;
+    }
+
+    if (!staff.sameHours) {
+      const hoursResult = await setStaffWorkingHours(staffResult.data.id, staffHours);
+      if (!hoursResult.ok) {
+        setStaffSaving(false);
+        setStaffApiError(hoursResult.error);
+        return;
+      }
     }
 
     const price = toMinorUnits(service.priceDisplay);
@@ -337,6 +383,19 @@ export function OnboardingFlow() {
       }
     }
 
+    if (staff.email && staff.email.trim()) {
+      const inviteResult = await inviteStaff({
+        email: staff.email.trim(),
+        name: staff.name.trim(),
+        role: staff.role === 'owner' ? 'admin' : (staff.role as 'staff' | 'admin')
+      });
+      if (!inviteResult.ok) {
+        console.warn('[Onboarding] Staff created but invitation failed:', inviteResult.error);
+      } else {
+        console.log('[Onboarding] Staff invitation sent:', inviteResult.data);
+      }
+    }
+
     setStaffSaving(false);
     setStaffId(staffResult.data.id);
     setServiceId(serviceResult.data.id);
@@ -344,7 +403,7 @@ export function OnboardingFlow() {
   };
 
   const handleCreateBooking = async () => {
-    const errors = validateBooking(booking, salonId, assignService);
+    const errors = validateBooking(booking, salonId, assignService, salon.locale);
     setBookingErrors(errors);
     if (Object.keys(errors).length > 0) return;
     if (!staffId || !serviceId || !salonId) {
@@ -381,7 +440,32 @@ export function OnboardingFlow() {
     setManageSuccess('');
 
     if (paymentsEnabled && paymentsReady) {
-      const checkoutResult = await createCheckout(bookingResult.data.id);
+      if (!salonSlug) {
+        setBookingSaving(false);
+        setBookingError('Salon slug mangler.');
+        return;
+      }
+      const tokenResult = await createBookingAccessToken(bookingResult.data.id);
+      if (!tokenResult.ok) {
+        setBookingSaving(false);
+        setBookingError(tokenResult.error);
+        return;
+      }
+      const successUrl = buildBookingConfirmationUrl({
+        salonSlug,
+        bookingId: bookingResult.data.id,
+        token: tokenResult.data.bookingToken
+      });
+      const cancelUrl = buildBookingManageUrl({
+        salonSlug,
+        bookingId: bookingResult.data.id,
+        token: tokenResult.data.bookingToken
+      });
+      const checkoutResult = await createCheckout({
+        bookingId: bookingResult.data.id,
+        successUrl,
+        cancelUrl
+      });
       setBookingSaving(false);
       if (!checkoutResult.ok) {
         setBookingSuccess(copy.cta.success.bookingPending);
@@ -434,6 +518,21 @@ export function OnboardingFlow() {
     setManageSuccess(copy.cta.success.bookingRescheduled);
   };
 
+  const handleFinishOnboarding = async () => {
+    if (!salonId) return;
+    setFinishingOnboarding(true);
+    console.log('[Onboarding] Starting salon activation for:', salonId);
+    const result = await activateSalon(salonId);
+    if (!result.ok) {
+      console.error('[Onboarding] Activation failed:', result.error, 'Status:', result.status);
+      setBookingError(result.error);
+      setFinishingOnboarding(false);
+      return;
+    }
+    console.log('[Onboarding] Salon activated successfully:', result.data);
+    window.location.href = '/console';
+  };
+
   if (
     gateState === 'checking' ||
     gateState === 'has-salon' ||
@@ -456,6 +555,9 @@ export function OnboardingFlow() {
 
   return (
     <div className="app">
+      <div className="console-banner">
+        Du skal gennemføre onboarding, før du kan bruge Owner Console.
+      </div>
       <div className="top-bar">
         <div className="brand">
           <div className="brand-mark" />
@@ -487,6 +589,8 @@ export function OnboardingFlow() {
               staffHours={staffHours}
               service={service}
               currency={salon.currency}
+              salonType={salon.salonType}
+              locale={salon.locale}
               assignService={assignService}
               errors={staffErrors}
               saving={staffSaving}
@@ -577,6 +681,8 @@ export function OnboardingFlow() {
               onCreateBooking={handleCreateBooking}
               onBack={() => setStep('payments')}
               onFixAssignments={() => setStep('staff')}
+              onFinishOnboarding={handleFinishOnboarding}
+              finishingOnboarding={finishingOnboarding}
             />
           )}
         </main>

@@ -305,4 +305,132 @@ describe('booking flow', () => {
     await supabase.from('salon_business_hours').delete().eq('salon_id', salonId);
     await supabase.from('salons').delete().eq('id', salonId);
   });
+
+  itIfSupabase('checkout is idempotent', async () => {
+    const supabase = getSupabaseClient();
+    const { salonId, staffId, serviceId, customerId, userId } = await seedSalonData(supabase);
+
+    const bookingResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/bookings',
+      headers: { 'x-user-id': userId },
+      payload: {
+        customerId,
+        staffId,
+        serviceId,
+        startUtc: '2025-01-06T12:00:00.000Z'
+      }
+    });
+    const booking = bookingResponse.json() as { id: string };
+
+    const checkoutResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${booking.id}/checkout`,
+      headers: { 'x-user-id': userId, 'idempotency-key': 'checkout-test' },
+      payload: {
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel'
+      }
+    });
+    expect(checkoutResponse.statusCode).toBe(201);
+    const first = checkoutResponse.json() as { paymentId: string; checkoutUrl: string };
+
+    const secondResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${booking.id}/checkout`,
+      headers: { 'x-user-id': userId, 'idempotency-key': 'checkout-test' },
+      payload: {
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel'
+      }
+    });
+    expect(secondResponse.statusCode).toBe(201);
+    const second = secondResponse.json() as { paymentId: string; checkoutUrl: string };
+
+    expect(second.paymentId).toBe(first.paymentId);
+    expect(second.checkoutUrl).toBe(first.checkoutUrl);
+
+    await supabase.from('payments').delete().eq('booking_id', booking.id);
+    await supabase.from('bookings').delete().eq('salon_id', salonId);
+    await supabase.from('customers').delete().eq('salon_id', salonId);
+    await supabase.from('services').delete().eq('salon_id', salonId);
+    await supabase.from('staff_profiles').delete().eq('salon_id', salonId);
+    await supabase.from('salon_business_hours').delete().eq('salon_id', salonId);
+    await supabase.from('salons').delete().eq('id', salonId);
+  });
+
+  itIfSupabase('refund is idempotent and tenant scoped', async () => {
+    const supabase = getSupabaseClient();
+    const { salonId, staffId, serviceId, customerId, userId } = await seedSalonData(supabase);
+    const other = await seedSalonData(supabase);
+
+    const bookingResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/bookings',
+      headers: { 'x-user-id': userId },
+      payload: {
+        customerId,
+        staffId,
+        serviceId,
+        startUtc: '2025-01-06T14:00:00.000Z'
+      }
+    });
+    const booking = bookingResponse.json() as { id: string };
+
+    const checkoutResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/bookings/${booking.id}/checkout`,
+      headers: { 'x-user-id': userId },
+      payload: {
+        successUrl: 'https://example.com/success',
+        cancelUrl: 'https://example.com/cancel'
+      }
+    });
+    const checkout = checkoutResponse.json() as { paymentId: string };
+
+    const webhookRequest = buildWebhookRequest(checkout.paymentId, booking.id);
+    await app.inject({
+      method: 'POST',
+      url: '/v1/webhooks/stripe',
+      payload: webhookRequest.payload,
+      headers: webhookRequest.headers
+    });
+
+    const forbiddenRefund = await app.inject({
+      method: 'POST',
+      url: `/v1/payments/${checkout.paymentId}/refund`,
+      headers: { 'x-user-id': other.userId }
+    });
+    expect(forbiddenRefund.statusCode).toBe(403);
+
+    const refundResponse = await app.inject({
+      method: 'POST',
+      url: `/v1/payments/${checkout.paymentId}/refund`,
+      headers: { 'x-user-id': userId, 'idempotency-key': 'refund-test' }
+    });
+    expect(refundResponse.statusCode).toBe(200);
+
+    const secondRefund = await app.inject({
+      method: 'POST',
+      url: `/v1/payments/${checkout.paymentId}/refund`,
+      headers: { 'x-user-id': userId, 'idempotency-key': 'refund-test' }
+    });
+    expect(secondRefund.statusCode).toBe(200);
+
+    await supabase.from('payments').delete().eq('booking_id', booking.id);
+    await supabase.from('bookings').delete().eq('salon_id', salonId);
+    await supabase.from('customers').delete().eq('salon_id', salonId);
+    await supabase.from('services').delete().eq('salon_id', salonId);
+    await supabase.from('staff_profiles').delete().eq('salon_id', salonId);
+    await supabase.from('salon_business_hours').delete().eq('salon_id', salonId);
+    await supabase.from('salons').delete().eq('id', salonId);
+
+    await supabase.from('payments').delete().eq('salon_id', other.salonId);
+    await supabase.from('bookings').delete().eq('salon_id', other.salonId);
+    await supabase.from('customers').delete().eq('salon_id', other.salonId);
+    await supabase.from('services').delete().eq('salon_id', other.salonId);
+    await supabase.from('staff_profiles').delete().eq('salon_id', other.salonId);
+    await supabase.from('salon_business_hours').delete().eq('salon_id', other.salonId);
+    await supabase.from('salons').delete().eq('id', other.salonId);
+  });
 });

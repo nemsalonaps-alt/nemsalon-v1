@@ -1,8 +1,8 @@
 import { env } from '../../../config/env.js';
 import { providers, type PaymentProvider } from '../../../config/providers.js';
 import { HttpError, httpError } from '../../../server/http-error.js';
-import { getBookingById, updateBookingStatus } from '../../content/repo/booking-repo.js';
-import { getCustomerById } from '../../content/repo/customer-repo.js';
+import { getBookingById, updateBookingStatus } from '../../bookings/repo/bookings-repo.js';
+import { getCustomerById } from '../../customers/repo/customers-repo.js';
 import { notificationsService } from '../../notifications/service/notifications-service.js';
 import {
   createPayment,
@@ -15,7 +15,8 @@ import {
   updatePaymentStatus,
   updatePaymentProviderReference
 } from '../repo/payments-repo.js';
-import { createAuditLog } from '../repo/audit-repo.js';
+import { createAuditLog } from '../../audit/repo/audit-repo.js';
+import { createEvent } from '../../events/repo/events-repo.js';
 import {
   constructStripeEvent,
   createStripeCheckout,
@@ -27,7 +28,6 @@ import {
 
 export type CheckoutInput = {
   bookingId: string;
-  provider?: PaymentProvider;
   successUrl: string;
   cancelUrl: string;
   salonId?: string;
@@ -94,11 +94,6 @@ export const paymentsService = {
 
     if (booking.status !== 'pending') {
       throw httpError(409, 'BOOKING_NOT_PENDING', 'Booking is not in a payable state.');
-    }
-
-    const provider = input.provider ?? 'stripe';
-    if (provider === 'mobilepay') {
-      throw httpError(501, 'MOBILEPAY_NOT_IMPLEMENTED', 'MobilePay checkout is not implemented yet.');
     }
 
     const resolvedIdempotencyKey =
@@ -277,6 +272,12 @@ export const paymentsService = {
           entityType: 'booking',
           entityId: booking.id
         });
+        await createEvent({
+          eventKey: 'booking.confirmed',
+          salonId: booking.salonId,
+          userId: null,
+          metadata: { bookingId: booking.id, paymentId: payment.id }
+        });
       }
 
       return { received: true, idempotent: !paid };
@@ -375,6 +376,12 @@ export const paymentsService = {
         entityType: 'booking',
         entityId: booking.id
       });
+      await createEvent({
+        eventKey: 'booking.confirmed',
+        salonId: booking.salonId,
+        userId: null,
+        metadata: { bookingId: booking.id, paymentId: payment.id }
+      });
     }
 
     return { received: true, idempotent: !paid };
@@ -385,6 +392,7 @@ export const paymentsService = {
     salonId: string;
     userId?: string;
     idempotencyKey?: string;
+    reason?: string;
   }) {
     const payment = await getPaymentById(input.paymentId);
     if (!payment) {
@@ -412,7 +420,7 @@ export const paymentsService = {
         action: 'payment.refunded',
         entityType: 'payment',
         entityId: payment.id,
-        metadata: { bookingId: payment.bookingId }
+        metadata: { bookingId: payment.bookingId, reason: input.reason ?? null }
       });
       return { payment: updated ?? payment, idempotent: false };
     }
@@ -454,7 +462,11 @@ export const paymentsService = {
       action: 'payment.refunded',
       entityType: 'payment',
       entityId: payment.id,
-      metadata: { bookingId: payment.bookingId, refundId: refund.id }
+      metadata: {
+        bookingId: payment.bookingId,
+        refundId: refund.id,
+        reason: input.reason ?? null
+      }
     });
 
     return { payment: updated ?? payment, idempotent: false };

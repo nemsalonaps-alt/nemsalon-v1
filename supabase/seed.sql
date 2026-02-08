@@ -1,3 +1,14 @@
+-- Opret dev bruger i auth.users hvis den ikke findes (kun til lokal udvikling)
+insert into auth.users (id, email, raw_user_meta_data, email_confirmed_at, created_at, updated_at)
+select 
+  'cdf2da82-4bb7-4261-b23d-7b89ff00f762'::uuid,
+  'dev@example.com',
+  '{"full_name": "Dev User"}'::jsonb,
+  now(),
+  now(),
+  now()
+where not exists (select 1 from auth.users where email = 'dev@example.com');
+
 do $$
 declare
   salon_id uuid;

@@ -1,4 +1,30 @@
 export const copy = {
+  customerPortal: {
+    title: 'My Bookings',
+    loading: 'Loading...',
+    logout: 'Log out',
+    emptyState: 'No bookings found.',
+    viewDetails: 'View details',
+    filters: {
+      all: 'All',
+      upcoming: 'Upcoming',
+      past: 'Past',
+      cancelled: 'Cancelled'
+    },
+    status: {
+      pending: 'Pending',
+      confirmed: 'Confirmed',
+      in_progress: 'In Progress',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      no_show: 'No Show'
+    },
+    notLoggedIn: {
+      title: 'Not Logged In',
+      message: 'Please log in to view your bookings.',
+      loginButton: 'Go to Login'
+    }
+  },
   dayLabels: {
     mon: 'Mon',
     tue: 'Tue',
@@ -82,12 +108,24 @@ export const copy = {
     title: 'Create your salon',
     body: 'Set your default settings now. You can always fine-tune later.',
     missingSalonId: 'No salon was assigned yet. Please retry login or contact support.',
+    types: {
+      hair_salon: { label: 'Hair salon', description: 'Cut, color, styling, and hair treatments', serviceExample: 'Haircut & Style' },
+      nail_salon: { label: 'Nail salon', description: 'Manicures, pedicures, and nail art', serviceExample: 'Manicure' },
+      wellness_center: { label: 'Wellness center', description: 'Holistic wellness and health services', serviceExample: 'Wellness Treatment' },
+      massage_clinic: { label: 'Massage clinic', description: 'Therapeutic and relaxation massage', serviceExample: 'Relaxing Massage' },
+      tattoo_studio: { label: 'Tattoo studio', description: 'Custom tattoos and body art', serviceExample: 'Tattoo Session' },
+      barbershop: { label: 'Barbershop', description: 'Men\'s cuts, beard trims, and grooming', serviceExample: 'Beard Trim' },
+      spa_wellness: { label: 'Spa & wellness', description: 'Full spa treatments and relaxation', serviceExample: 'Spa Package' },
+      cosmetic_clinic: { label: 'Cosmetic clinic', description: 'Skincare, facials, and beauty treatments', serviceExample: 'Facial Treatment' }
+    },
     fields: {
       nameLabel: 'Salon name',
       namePlaceholder: 'Studio Ember',
       timezoneLabel: 'Timezone',
       timezonePlaceholder: 'Europe/Copenhagen',
       localeLabel: 'Locale',
+      typeLabel: 'Salon type',
+      typePlaceholder: 'Select type',
       currencyLabel: 'Currency',
       currencyPlaceholder: 'DKK'
     },
@@ -109,6 +147,8 @@ export const copy = {
       nameLabel: 'Staff name',
       namePlaceholder: 'Ava Jensen',
       roleLabel: 'Role',
+      emailLabel: 'Email (optional)',
+      emailPlaceholder: 'staff@example.com',
       useSalonHours: 'Use salon business hours',
       workingHoursTitle: 'Staff working hours'
     },
@@ -221,11 +261,13 @@ export const copy = {
       name: 'Salon name must be 2-60 characters.',
       timezone: 'Timezone is required.',
       locale: 'Locale is required.',
-      currency: 'Currency is required.'
+      currency: 'Currency is required.',
+      type: 'Salon type is required.'
     },
     staff: {
       name: 'Staff name must be 2-60 characters.',
       role: 'Select a valid role.',
+      email: 'Please enter a valid email address.',
       serviceName: 'Service name must be 2-60 characters.',
       serviceDuration: 'Duration must be between 5 and 480 minutes.',
       servicePrice: 'Price must be a positive number.',
@@ -237,6 +279,151 @@ export const copy = {
       time: 'Select a date and time.',
       salonId: 'Salon ID is missing. Refresh or contact support.',
       assignService: 'Assign the service to a staff member first.'
+    }
+  },
+  customerDashboard: {
+    title: 'Your booking',
+    status: {
+      pending: 'Pending',
+      confirmed: 'Confirmed',
+      in_progress: 'In progress',
+      completed: 'Completed',
+      cancelled: 'Cancelled',
+      no_show: 'No show'
+    },
+    paymentStatus: {
+      pending: 'Pending',
+      paid: 'Paid',
+      failed: 'Failed',
+      refunded: 'Refunded'
+    },
+    labels: {
+      service: 'Service',
+      staff: 'Staff',
+      date: 'Date',
+      time: 'Time',
+      status: 'Status',
+      payment: 'Payment',
+      phone: 'Phone',
+      email: 'Email'
+    },
+    actions: {
+      showOnMap: 'Show on map',
+      changeBooking: 'Change booking',
+      reschedule: 'Reschedule',
+      cancel: 'Cancel',
+      selectNewTime: 'Select new time',
+      cancelReschedule: 'Cancel reschedule',
+      addToCalendar: 'Add to calendar',
+      payNow: 'Pay now'
+    },
+    states: {
+      cancelling: 'Cancelling...',
+      rescheduling: 'Rescheduling...',
+      preparingPayment: 'Preparing payment...'
+    },
+    noSlots: 'No available slots for this date.',
+    windowClosed: 'The cancellation window has closed. Contact the salon for changes.',
+    completed: {
+      title: 'Booking completed',
+      message: 'Thank you for your visit!'
+    },
+    cancelled: {
+      title: 'Booking cancelled',
+      message: 'This booking has been cancelled.'
+    },
+    practicalInfo: {
+      title: 'Practical information'
+    }
+  },
+  console: {
+    validation: {
+      staff: {
+        name: 'Staff name must be 2-60 characters.',
+        role: 'Select a valid role.',
+        serviceName: 'Service name must be 2-60 characters.',
+        serviceDuration: 'Duration must be between 5 and 480 minutes.',
+        servicePrice: 'Price must be a positive number.',
+        serviceBuffer: 'Buffer must be 0, 5, 10, or 15.',
+        assignService: 'At least one staff must be assigned to the service.',
+        serviceRequired: 'At least one service must be assigned to staff.'
+      },
+      booking: {
+        customerName: 'Customer name is required.',
+        time: 'Select a date and time.',
+        salonId: 'Salon ID is missing. Refresh or contact support.',
+        assignService: 'Assign the service to a staff member first.'
+      },
+      salon: {
+        name: 'Salon name must be 2-60 characters.',
+        timezone: 'Timezone is required.',
+        locale: 'Locale is required.',
+        currency: 'Currency is required.'
+      },
+      hours: {
+        noDays: 'Select at least one day.',
+        timeRange: 'Start time must be before end time.'
+      }
+    },
+    paymentMissing: 'No payment found for this booking.',
+    refundFailed: 'Refund failed. Please try again.',
+    refundIdempotent: 'Refund already processed.',
+    refundSuccess: 'Refund processed successfully.',
+    reconcileFailed: 'Failed to reconcile payment.',
+    reconcileUpdated: 'Payment status updated.',
+    reconcileNoop: 'Payment already up to date.',
+    refundAction: 'Refund payment',
+    reconcileAction: 'Reconcile payment',
+    dashboard: {
+      error: 'Failed to load dashboard data.',
+      retry: 'Retry',
+      kpis: {
+        todayBookings: "Today's Bookings",
+        todayRevenue: "Today's Revenue",
+        completed: 'completed',
+        remaining: 'remaining',
+        confirmedAmount: 'confirmed',
+        noRevenueYet: 'No revenue yet',
+        upcomingBookings: 'Upcoming Bookings',
+        nextBookingAt: 'Next at',
+        systemStatus: 'System Status',
+        allGood: 'All good',
+        actionRequired: 'Action required',
+        noIssues: 'No issues detected'
+      },
+      bookings: {
+        title: "Today's Bookings",
+        unknownCustomer: 'Unknown customer',
+        status: {
+          pending: 'Pending',
+          confirmed: 'Confirmed',
+          in_progress: 'In progress',
+          completed: 'Completed',
+          cancelled: 'Cancelled',
+          no_show: 'No show'
+        },
+        emptyTitle: 'No bookings today',
+        emptyBody: 'There are no bookings scheduled for today.',
+        createBooking: 'Create booking',
+        viewCalendar: 'View calendar'
+      },
+      quickActions: {
+        createManual: 'Create manual booking',
+        goToCalendar: 'Go to calendar',
+        viewStaff: 'View staff',
+        settings: 'Settings',
+        support: 'Support'
+      }
+    },
+    calendar: {
+      today: 'Today',
+      dayView: 'Day',
+      weekView: 'Week',
+      createBooking: 'Create booking',
+      selectStaff: 'Select staff',
+      allStaff: 'All staff',
+      noBookings: 'No bookings',
+      goToToday: 'Go to today'
     }
   },
   apiErrors: {
@@ -271,6 +458,7 @@ export const copy = {
     'error.booking.not_found': 'Booking was not found.',
     'error.booking.cannot_cancel': 'This booking cannot be cancelled.',
     'error.booking.cannot_reschedule': 'This booking cannot be rescheduled.',
+    'error.booking.cancellation_window': 'Cancellation window has passed. Contact the salon.',
     'error.booking_not_found': 'Booking was not found.',
     'error.availability.invalid_query': 'Availability query is invalid.',
     'error.availability.service_not_found': 'Service was not found.',
@@ -289,3 +477,27 @@ export const copy = {
       `${salon} / ${staff} / ${service}`
   }
 } as const;
+
+const STORAGE_KEY = 'nemsalon-locale';
+
+export type Locale = 'da' | 'en';
+export type SupportedLocale = Locale;
+
+export function resolveLocale(locale: string): Locale {
+  return locale?.toLowerCase().startsWith('da') ? 'da' : 'en';
+}
+
+export function getStoredLocale(): Locale {
+  if (typeof window === 'undefined') return 'en';
+  const stored = localStorage.getItem(STORAGE_KEY);
+  return stored === 'da' ? 'da' : 'en';
+}
+
+export function setStoredLocale(locale: string): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(STORAGE_KEY, locale === 'da' ? 'da' : 'en');
+}
+
+export function getCopy(_locale?: string): typeof copy {
+  return copy;
+}

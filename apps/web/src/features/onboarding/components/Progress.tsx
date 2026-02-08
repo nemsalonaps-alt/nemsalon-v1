@@ -1,5 +1,5 @@
 import type { StepId } from '../types';
-import { copy } from '../copy';
+import { getCopy } from '../copy';
 
 type Step = {
   id: StepId;
@@ -13,6 +13,7 @@ type ProgressProps = {
 };
 
 export function Progress({ steps, activeStep }: ProgressProps) {
+  const copy = getCopy();
   const stepIndex = steps.findIndex((item) => item.id === activeStep);
 
   return (

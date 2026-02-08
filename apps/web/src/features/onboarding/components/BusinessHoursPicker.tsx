@@ -1,14 +1,17 @@
 import type { WeeklyHours, DayId } from '../types';
-import { dayLabels } from '../schema';
-import { copy } from '../copy';
+import { getDayLabels } from '../schema';
+import { getCopy } from '../copy';
 
 type BusinessHoursPickerProps = {
   weekly: WeeklyHours[];
   onChange: (day: DayId, patch: Partial<WeeklyHours>) => void;
   error?: string;
+  locale?: string;
 };
 
-export function BusinessHoursPicker({ weekly, onChange, error }: BusinessHoursPickerProps) {
+export function BusinessHoursPicker({ weekly, onChange, error, locale }: BusinessHoursPickerProps) {
+  const copy = getCopy(locale);
+  const dayLabels = getDayLabels(locale);
   return (
     <div className="panel" style={{ marginTop: 18 }}>
       <h2>{copy.salon.hours.title}</h2>

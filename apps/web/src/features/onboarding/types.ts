@@ -1,6 +1,15 @@
 export type GateState = 'checking' | 'needs-onboarding' | 'has-salon' | 'needs-login' | 'error';
 export type StepId = 'salon' | 'staff' | 'payments' | 'cta';
 export type DayId = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+export type SalonType =
+  | 'hair_salon'
+  | 'nail_salon'
+  | 'wellness_center'
+  | 'massage_clinic'
+  | 'tattoo_studio'
+  | 'barbershop'
+  | 'spa_wellness'
+  | 'cosmetic_clinic';
 
 export type AvailabilitySlot = {
   startUtc: string;
@@ -31,6 +40,7 @@ export type SalonForm = {
   name: string;
   timezone: string;
   locale: string;
+  salonType: SalonType | '';
   currency: string;
 };
 
@@ -38,6 +48,7 @@ export type StaffForm = {
   name: string;
   role: 'owner' | 'admin' | 'staff';
   sameHours: boolean;
+  email?: string;
 };
 
 export type ServiceForm = {
@@ -74,19 +85,25 @@ export type AuthMeResponse = {
     salon?: {
       id: string;
       name?: string | null;
+      slug?: string | null;
       status?: 'draft' | 'active';
       locale?: string | null;
+      salonType?: SalonType | null;
       currency?: string | null;
       timezone?: string | null;
+      cancellationWindowMinutes?: number | null;
     };
   }>;
   primarySalonId?: string | null;
   salon?: {
     id: string;
     name?: string | null;
+    slug?: string | null;
     status?: 'draft' | 'active';
     locale?: string | null;
+    salonType?: SalonType | null;
     currency?: string | null;
     timezone?: string | null;
+    cancellationWindowMinutes?: number | null;
   } | null;
 };

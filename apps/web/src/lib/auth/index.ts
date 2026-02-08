@@ -7,9 +7,17 @@ type SignUpResult = { ok: true; needsConfirm: boolean } | { ok: false; errorKey:
 
 export async function getAccessToken(): Promise<string | null> {
   if (!supabase) return null;
-  const { data, error } = await supabase.auth.getSession();
-  if (error) return null;
-  return data.session?.access_token ?? null;
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      console.warn('Supabase getSession error:', error.message);
+      return null;
+    }
+    return data.session?.access_token ?? null;
+  } catch (err) {
+    console.warn('Supabase getSession exception:', err);
+    return null;
+  }
 }
 
 const mapAuthError = (message: string) => {

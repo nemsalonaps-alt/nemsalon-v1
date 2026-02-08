@@ -1,1 +1,7 @@
-export { copy } from '../../i18n';
+export {
+  getCopy,
+  getStoredLocale,
+  setStoredLocale,
+  resolveLocale,
+  type SupportedLocale
+} from '../../i18n';

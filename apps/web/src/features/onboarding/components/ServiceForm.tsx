@@ -1,15 +1,23 @@
-import type { ServiceForm as ServiceFormType } from '../types';
+import type { ServiceForm as ServiceFormType, SalonType } from '../types';
 import { bufferOptions } from '../schema';
-import { copy } from '../copy';
+import { getCopy } from '../copy';
 
 type ServiceFormProps = {
   service: ServiceFormType;
   currency: string;
+  salonType?: SalonType | '';
   errors: Record<string, string>;
   onServiceChange: (patch: Partial<ServiceFormType>) => void;
 };
 
-export function ServiceForm({ service, currency, errors, onServiceChange }: ServiceFormProps) {
+export function ServiceForm({ service, currency, salonType, errors, onServiceChange }: ServiceFormProps) {
+  const copy = getCopy();
+  const typeKey =
+    salonType && salonType in copy.salon.types
+      ? (salonType as keyof typeof copy.salon.types)
+      : null;
+  const namePlaceholder =
+    (typeKey ? copy.salon.types[typeKey].serviceExample : '') || copy.staff.service.namePlaceholder;
   return (
     <section className="panel">
       <h2>{copy.staff.service.title}</h2>
@@ -21,7 +29,7 @@ export function ServiceForm({ service, currency, errors, onServiceChange }: Serv
             className="input"
             value={service.name}
             onChange={(event) => onServiceChange({ name: event.target.value })}
-            placeholder={copy.staff.service.namePlaceholder}
+            placeholder={namePlaceholder}
           />
           {errors.serviceName && <span className="error">{errors.serviceName}</span>}
         </label>

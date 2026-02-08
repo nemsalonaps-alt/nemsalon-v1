@@ -74,7 +74,7 @@ export function createTimeZoneHelpers(timeZone: string) {
     const hour = Math.floor(minutes / 60);
     const minute = minutes % 60;
     const guess = Date.UTC(localDate.year, localDate.month - 1, localDate.day, hour, minute, 0);
-    let offset = getOffset(new Date(guess));
+    const offset = getOffset(new Date(guess));
     let utc = guess - offset;
     const nextOffset = getOffset(new Date(utc));
     if (nextOffset !== offset) {

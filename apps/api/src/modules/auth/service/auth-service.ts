@@ -3,11 +3,25 @@ import { authRepo } from '../repo/auth-repo.js';
 import { httpError } from '../../../server/http-error.js';
 import { getSupabaseClient } from '../../../server/db.js';
 import { env } from '../../../config/env.js';
-import type { AuthMeResponse, AuthUser } from '../domain/auth-domain.js';
+import type { AuthMeResponse, AuthUser, Membership } from '../domain/auth-domain.js';
+import { setRequestContext } from '../../../server/request-context.js';
 
 type AuthResolution = {
   user: AuthUser;
 };
+
+const roleWeight: Record<Membership['role'], number> = {
+  owner: 2,
+  admin: 2,
+  staff: 1
+};
+
+const platformAdminAllowlist = new Set(
+  (env.PLATFORM_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 export const authService = {
   async resolveAuthUser(request: FastifyRequest): Promise<AuthResolution> {
@@ -19,7 +33,7 @@ export const authService = {
       if (error || !data?.user) {
         throw httpError(401, 'UNAUTHORIZED', 'Invalid or expired session.');
       }
-      return {
+      const resolved = {
         user: {
           id: data.user.id,
           email: data.user.email ?? null,
@@ -27,6 +41,8 @@ export const authService = {
           phone: data.user.phone ?? null
         }
       };
+      setRequestContext(request, { userId: resolved.user.id });
+      return resolved;
     }
 
     const devBypassEnabled = env.DEV_AUTH_BYPASS === 'true';
@@ -36,12 +52,14 @@ export const authService = {
 
     const devUserId = request.headers['x-user-id'];
     if (devBypassEnabled && typeof devUserId === 'string' && devUserId.length > 0) {
-      return {
+      const resolved = {
         user: {
           id: devUserId,
           email: typeof request.headers['x-user-email'] === 'string' ? request.headers['x-user-email'] : null
         }
       };
+      setRequestContext(request, { userId: resolved.user.id });
+      return resolved;
     }
 
     throw httpError(401, 'UNAUTHORIZED', 'Missing authentication.');
@@ -94,16 +112,49 @@ export const authService = {
     }
     return record.primarySalonId;
   },
+  async requireMembership(request: FastifyRequest, salonId: string): Promise<Membership> {
+    const { user } = await this.resolveAuthUser(request);
+    const memberships = await authRepo.getMembershipsByUserId(user.id);
+    const membership = memberships.find((entry) => entry.salonId === salonId && entry.active);
+    if (!membership) {
+      throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
+    }
+    setRequestContext(request, { userId: user.id, salonId, role: membership.role });
+    return membership;
+  },
+  async requireRole(
+    request: FastifyRequest,
+    salonId: string,
+    minRole: Membership['role']
+  ): Promise<Membership> {
+    const membership = await this.requireMembership(request, salonId);
+    if (roleWeight[membership.role] < roleWeight[minRole]) {
+      throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
+    }
+    return membership;
+  },
   async requireSalonRole(
     request: FastifyRequest,
     salonId: string,
     roles: Array<'owner' | 'admin' | 'staff'>
   ): Promise<void> {
-    const { user } = await this.resolveAuthUser(request);
-    const memberships = await authRepo.getMembershipsByUserId(user.id);
-    const membership = memberships.find((entry) => entry.salonId === salonId && entry.active);
-    if (!membership || !roles.includes(membership.role)) {
+    const membership = await this.requireMembership(request, salonId);
+    if (!roles.includes(membership.role)) {
       throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
     }
+  },
+  async requirePlatformAdmin(request: FastifyRequest): Promise<AuthUser> {
+    const { user } = await this.resolveAuthUser(request);
+    const headerToken = request.headers['x-platform-admin-token'];
+    const tokenMatch =
+      env.PLATFORM_ADMIN_TOKEN &&
+      typeof headerToken === 'string' &&
+      headerToken === env.PLATFORM_ADMIN_TOKEN;
+    const email = user.email?.toLowerCase() ?? null;
+    const allowlisted = email ? platformAdminAllowlist.has(email) : false;
+    if (!tokenMatch && !allowlisted) {
+      throw httpError(403, 'AUTH_FORBIDDEN', 'error.auth.forbidden');
+    }
+    return user;
   }
 };

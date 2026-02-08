@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import type { GateState } from '../types';
-import { copy } from '../copy';
+import { getCopy } from '../copy';
 import { hasSupabaseConfig, signInWithPassword, signUpWithPassword } from '../../../lib/auth';
+import { trackEvent } from '../api';
 
 type GateProps = {
   state: GateState;
@@ -10,6 +11,7 @@ type GateProps = {
 };
 
 export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
+  const copy = getCopy();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -34,14 +36,16 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
     const result = await signInWithPassword(email, password);
     setSubmitting(false);
     if (!result.ok) {
-      setError(copy.apiErrors[result.errorKey] ?? copy.apiErrors.generic);
+      setError((copy.apiErrors as Record<string, string>)[result.errorKey] ?? copy.apiErrors.generic);
       return;
     }
+    trackEvent('auth.login_success', { method: 'password' }).catch(() => {});
     onRetry();
   };
 
   const handleDevBypass = () => {
     setDevStatus(copy.gate.devHelper.bypassNotice);
+    trackEvent('auth.login_success', { method: 'dev_bypass' }).catch(() => {});
     onRetry();
   };
 
@@ -59,11 +63,12 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
     const result = await signUpWithPassword(email, password);
     setDevSubmitting(false);
     if (!result.ok) {
-      setDevStatus(copy.apiErrors[result.errorKey] ?? copy.apiErrors.generic);
+      setDevStatus((copy.apiErrors as Record<string, string>)[result.errorKey] ?? copy.apiErrors.generic);
       return;
     }
     if (!result.needsConfirm) {
       setDevStatus(copy.gate.devHelper.createdAndSignedIn);
+      trackEvent('auth.login_success', { method: 'password' }).catch(() => {});
       onRetry();
       return;
     }
@@ -88,11 +93,13 @@ export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
         <h1>{copy.gate.hasSalon.title}</h1>
         <p>{copy.gate.hasSalon.body}</p>
         <div className="btn-row">
-          <button className="btn primary" type="button">
+          <button
+            className="btn primary"
+            type="button"
+            onClick={onReviewSettings}
+            disabled={!onReviewSettings}
+          >
             {copy.gate.hasSalon.primaryAction}
-          </button>
-          <button className="btn ghost" type="button" onClick={onReviewSettings}>
-            {copy.gate.hasSalon.secondaryAction}
           </button>
         </div>
       </div>

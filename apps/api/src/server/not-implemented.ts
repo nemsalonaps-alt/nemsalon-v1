@@ -8,6 +8,7 @@ export function notImplemented(
   message = 'error.not_implemented'
 ) {
   const messageKey = isKey(message) ? message : 'error.not_implemented';
+  (request as { errorKey?: string }).errorKey = messageKey;
   return reply.code(501).send({
     code: 'NOT_IMPLEMENTED',
     message: messageKey,

@@ -1,7 +1,7 @@
-import type { SalonForm, WeeklyHours, DayId } from '../types';
+import type { SalonForm, WeeklyHours, DayId, SalonType } from '../types';
 import { StepLayout } from '../components/StepLayout';
 import { BusinessHoursPicker } from '../components/BusinessHoursPicker';
-import { copy } from '../copy';
+import { getCopy } from '../copy';
 
 type SalonStepProps = {
   salon: SalonForm;
@@ -24,6 +24,13 @@ export function SalonStep({
   onHoursChange,
   onContinue
 }: SalonStepProps) {
+  const copy = getCopy(salon.locale);
+  const typeKeys = Object.keys(copy.salon.types) as SalonType[];
+  const activeType =
+    salon.salonType && salon.salonType in copy.salon.types
+      ? (salon.salonType as SalonType)
+      : null;
+  const activeTypeMeta = activeType ? copy.salon.types[activeType] : null;
   return (
     <StepLayout
       badge={copy.salon.badge}
@@ -64,6 +71,25 @@ export function SalonStep({
           {errors.locale && <span className="error">{errors.locale}</span>}
         </label>
         <label className="field">
+          <span className="label">{copy.salon.fields.typeLabel}</span>
+          <select
+            className="select"
+            value={salon.salonType}
+            onChange={(event) =>
+              onSalonChange({ salonType: event.target.value as SalonType | '' })
+            }
+          >
+            <option value="">{copy.salon.fields.typePlaceholder}</option>
+            {typeKeys.map((key) => (
+              <option key={key} value={key}>
+                {copy.salon.types[key].label}
+              </option>
+            ))}
+          </select>
+          {errors.salonType && <span className="error">{errors.salonType}</span>}
+          {activeTypeMeta && <div className="note">{activeTypeMeta.description}</div>}
+        </label>
+        <label className="field">
           <span className="label">{copy.salon.fields.currencyLabel}</span>
           <input
             className="input"
@@ -75,7 +101,12 @@ export function SalonStep({
         </label>
       </div>
 
-      <BusinessHoursPicker weekly={weeklyHours} onChange={onHoursChange} error={errors.hours} />
+      <BusinessHoursPicker
+        weekly={weeklyHours}
+        onChange={onHoursChange}
+        error={errors.hours}
+        locale={salon.locale}
+      />
 
       <div className="btn-row">
         <button className="btn primary" type="button" onClick={onContinue} disabled={saving}>

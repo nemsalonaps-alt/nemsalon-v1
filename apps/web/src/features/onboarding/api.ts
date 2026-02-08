@@ -1,4 +1,4 @@
-import { copy } from './copy';
+import { getCopy } from './copy';
 import type { AuthMeResponse, WeeklyHours, AvailabilityResponse } from './types';
 import { getAccessToken } from '../../lib/auth';
 
@@ -11,8 +11,12 @@ type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: 
 
 const isErrorKey = (value: string) => /^[a-z][a-z0-9_.-]*$/.test(value);
 
-const formatApiError = (message: string) =>
-  isErrorKey(message) ? copy.apiErrors[message] ?? copy.apiErrors.generic : message;
+const formatApiError = (message: string) => {
+  const copy = getCopy();
+  if (!isErrorKey(message)) return message;
+  const errorMessage = (copy.apiErrors as Record<string, string>)[message];
+  return errorMessage ?? copy.apiErrors.generic;
+};
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {};
@@ -34,6 +38,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<ApiResult<T>> {
   try {
+    const copy = getCopy();
     const authHeaders = await getAuthHeaders();
     const response = await fetch(`${apiBase}${path}`, {
       ...options,
@@ -104,13 +109,24 @@ export async function fetchMe() {
   return apiRequest<AuthMeResponse>('/v1/auth/me');
 }
 
+export async function trackEvent(eventKey: string, metadata?: Record<string, unknown>) {
+  return apiRequest<{ ok: true }>('/v1/events', {
+    method: 'POST',
+    body: JSON.stringify({
+      eventKey,
+      metadata
+    })
+  });
+}
+
 export async function updateSalon(salonId: string, payload: {
   name: string;
   timezone: string;
   locale: string;
+  salonType?: string;
   currency: string;
 }) {
-  return apiRequest(`/v1/salons/${salonId}`, {
+  return apiRequest<{ slug?: string }>(`/v1/salons/${salonId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload)
   });
@@ -157,6 +173,35 @@ export async function assignStaffServices(staffId: string, serviceIds: string[])
   });
 }
 
+export async function inviteStaff(payload: {
+  email: string;
+  name: string;
+  role: 'staff' | 'admin';
+}) {
+  return apiRequest<{
+    success: true;
+    staffId: string;
+    inviteToken: string;
+  }>('/v1/auth/staff/invite', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function setStaffWorkingHours(staffId: string, weekly: WeeklyHours[]) {
+  return apiRequest<{ weekly: WeeklyHours[] }>(`/v1/staff/${staffId}/working-hours`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      weekly: weekly.map((entry) => ({
+        day: entry.day,
+        startTime: entry.start,
+        endTime: entry.end,
+        enabled: entry.enabled
+      }))
+    })
+  });
+}
+
 export async function createBooking(payload: {
   staffId: string;
   serviceId: string;
@@ -174,13 +219,25 @@ export async function createBooking(payload: {
   });
 }
 
-export async function createCheckout(bookingId: string) {
-  return apiRequest<{ checkoutUrl: string; paymentId: string }>(`/v1/bookings/${bookingId}/checkout`, {
+export async function createBookingAccessToken(bookingId: string) {
+  return apiRequest<{ bookingToken: string; expiresAt?: string | null }>(
+    `/v1/bookings/${bookingId}/access-token`,
+    {
+      method: 'POST'
+    }
+  );
+}
+
+export async function createCheckout(input: {
+  bookingId: string;
+  successUrl: string;
+  cancelUrl: string;
+}) {
+  return apiRequest<{ checkoutUrl: string; paymentId: string }>(`/v1/bookings/${input.bookingId}/checkout`, {
     method: 'POST',
     body: JSON.stringify({
-      provider: 'stripe',
-      successUrl: 'https://example.com/success',
-      cancelUrl: 'https://example.com/cancel'
+      successUrl: input.successUrl,
+      cancelUrl: input.cancelUrl
     })
   });
 }
@@ -196,6 +253,12 @@ export async function rescheduleBooking(bookingId: string, payload: { staffId: s
   return apiRequest<{ booking: { id: string; status: string } }>(`/v1/bookings/${bookingId}/reschedule`, {
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function activateSalon(salonId: string) {
+  return apiRequest<{ id: string; status: 'active' }>(`/v1/salons/${salonId}/activate`, {
+    method: 'POST'
   });
 }
 

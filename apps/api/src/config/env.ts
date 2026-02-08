@@ -15,15 +15,19 @@ const envSchema = z.object({
   POSTMARK_SERVER_TOKEN: z.string().optional(),
   POSTMARK_FROM: z.string().optional(),
   FCM_SERVICE_ACCOUNT_JSON: z.string().optional(),
-  MOBILEPAY_CLIENT_ID: z.string().optional(),
-  MOBILEPAY_CLIENT_SECRET: z.string().optional(),
-  MOBILEPAY_SUBSCRIPTION_KEY: z.string().optional(),
-  MOBILEPAY_WEBHOOK_SECRET: z.string().optional(),
   PAYMENTS_USE_MOCK: z.string().optional(),
   DEV_AUTH_BYPASS: z.string().optional(),
   CORS_ORIGINS: z.string().optional(),
   RATE_LIMIT_MAX: z.coerce.number().optional(),
-  RATE_LIMIT_WINDOW_MS: z.coerce.number().optional()
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().optional(),
+  FEATURE_AVAILABILITY: z.string().optional(),
+  FEATURE_NOTIFICATIONS: z.string().optional(),
+  FEATURE_CUSTOMER_PORTAL: z.enum(['true', 'false']).default('true'),
+  PLATFORM_ADMIN_EMAILS: z.string().optional(),
+  PLATFORM_ADMIN_TOKEN: z.string().optional(),
+  PUBLIC_APP_URL: z.string().url().optional(),
+  WEB_URL: z.string().url().optional(),
+  COOKIE_SECRET: z.string().optional()
 });
 
 export type Env = z.infer<typeof envSchema>;

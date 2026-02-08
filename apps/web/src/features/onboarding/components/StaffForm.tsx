@@ -1,6 +1,6 @@
 import type { StaffForm as StaffFormType, WeeklyHours, DayId } from '../types';
-import { dayLabels } from '../schema';
-import { copy } from '../copy';
+import { getDayLabels } from '../schema';
+import { getCopy } from '../copy';
 
 type StaffFormProps = {
   staff: StaffFormType;
@@ -8,9 +8,19 @@ type StaffFormProps = {
   errors: Record<string, string>;
   onStaffChange: (patch: Partial<StaffFormType>) => void;
   onHoursChange: (day: DayId, patch: Partial<WeeklyHours>) => void;
+  locale?: string;
 };
 
-export function StaffForm({ staff, staffHours, errors, onStaffChange, onHoursChange }: StaffFormProps) {
+export function StaffForm({
+  staff,
+  staffHours,
+  errors,
+  onStaffChange,
+  onHoursChange,
+  locale
+}: StaffFormProps) {
+  const copy = getCopy(locale);
+  const dayLabels = getDayLabels(locale);
   return (
     <section className="panel">
       <span className="badge">{copy.staff.badge}</span>
@@ -39,6 +49,20 @@ export function StaffForm({ staff, staffHours, errors, onStaffChange, onHoursCha
             <option value="staff">{copy.roles.staff}</option>
           </select>
           {errors.staffRole && <span className="error">{errors.staffRole}</span>}
+        </label>
+      </div>
+
+      <div className="grid two" style={{ marginTop: 16 }}>
+        <label className="field">
+          <span className="label">{copy.staff.fields.emailLabel ?? 'Email (optional)'}</span>
+          <input
+            className="input"
+            type="email"
+            value={staff.email ?? ''}
+            onChange={(event) => onStaffChange({ email: event.target.value || undefined })}
+            placeholder={copy.staff.fields.emailPlaceholder ?? 'staff@example.com'}
+          />
+          {errors.staffEmail && <span className="error">{errors.staffEmail}</span>}
         </label>
       </div>
 

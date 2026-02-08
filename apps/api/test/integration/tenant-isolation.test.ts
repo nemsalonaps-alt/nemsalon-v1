@@ -16,8 +16,81 @@ type ProvisionedUser = {
 describe('tenant isolation', () => {
   let app: ReturnType<typeof buildApp>;
 
-  test.todo('prevents cross-tenant access to customers endpoints');
-  test.todo('prevents cross-tenant access to services list/detail endpoints');
+  itIfSupabase('prevents cross-tenant access to customer endpoints', async () => {
+    const userA = await provisionUser();
+    const userB = await provisionUser();
+
+    try {
+      const createCustomer = await app.inject({
+        method: 'POST',
+        url: '/v1/customers',
+        headers: { 'x-user-id': userA.userId },
+        payload: {
+          name: 'Cross Tenant Customer',
+          email: 'cross@example.com'
+        }
+      });
+      expect(createCustomer.statusCode).toBe(201);
+      const customer = createCustomer.json() as { id: string };
+
+      const forbiddenGet = await app.inject({
+        method: 'GET',
+        url: `/v1/customers/${customer.id}`,
+        headers: { 'x-user-id': userB.userId }
+      });
+      expect(forbiddenGet.statusCode).toBe(403);
+
+      const forbiddenPatch = await app.inject({
+        method: 'PATCH',
+        url: `/v1/customers/${customer.id}`,
+        headers: { 'x-user-id': userB.userId },
+        payload: { name: 'Hacked' }
+      });
+      expect(forbiddenPatch.statusCode).toBe(403);
+    } finally {
+      await cleanupUser(userA);
+      await cleanupUser(userB);
+    }
+  });
+
+  itIfSupabase('prevents cross-tenant access to service endpoints', async () => {
+    const userA = await provisionUser();
+    const userB = await provisionUser();
+
+    try {
+      const createService = await app.inject({
+        method: 'POST',
+        url: '/v1/services',
+        headers: { 'x-user-id': userA.userId },
+        payload: {
+          name: 'Cross Tenant Service',
+          durationMinutes: 30,
+          price: 25000,
+          currency: 'DKK'
+        }
+      });
+      expect(createService.statusCode).toBe(201);
+      const service = createService.json() as { id: string };
+
+      const forbiddenGet = await app.inject({
+        method: 'GET',
+        url: `/v1/services/${service.id}`,
+        headers: { 'x-user-id': userB.userId }
+      });
+      expect(forbiddenGet.statusCode).toBe(403);
+
+      const forbiddenPatch = await app.inject({
+        method: 'PATCH',
+        url: `/v1/services/${service.id}`,
+        headers: { 'x-user-id': userB.userId },
+        payload: { name: 'Hacked service' }
+      });
+      expect(forbiddenPatch.statusCode).toBe(403);
+    } finally {
+      await cleanupUser(userA);
+      await cleanupUser(userB);
+    }
+  });
 
   beforeAll(async () => {
     app = buildApp();

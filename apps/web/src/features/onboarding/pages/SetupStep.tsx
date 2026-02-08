@@ -1,14 +1,22 @@
-import type { DayId, ServiceForm, StaffForm as StaffFormType, WeeklyHours } from '../types';
+import type {
+  DayId,
+  ServiceForm,
+  StaffForm as StaffFormType,
+  WeeklyHours,
+  SalonType
+} from '../types';
 import { AssignServices } from '../components/AssignServices';
 import { ServiceForm as ServiceFormComponent } from '../components/ServiceForm';
 import { StaffForm } from '../components/StaffForm';
-import { copy } from '../copy';
+import { getCopy } from '../copy';
 
 type SetupStepProps = {
   staff: StaffFormType;
   staffHours: WeeklyHours[];
   service: ServiceForm;
   currency: string;
+  salonType?: SalonType | '';
+  locale?: string;
   assignService: boolean;
   errors: Record<string, string>;
   saving: boolean;
@@ -26,6 +34,8 @@ export function SetupStep({
   staffHours,
   service,
   currency,
+  salonType,
+  locale,
   assignService,
   errors,
   saving,
@@ -37,6 +47,7 @@ export function SetupStep({
   onBack,
   onContinue
 }: SetupStepProps) {
+  const copy = getCopy();
   return (
     <>
       <StaffForm
@@ -45,10 +56,12 @@ export function SetupStep({
         errors={errors}
         onStaffChange={onStaffChange}
         onHoursChange={onStaffHoursChange}
+        locale={locale}
       />
       <ServiceFormComponent
         service={service}
         currency={currency}
+        salonType={salonType}
         errors={errors}
         onServiceChange={onServiceChange}
       />

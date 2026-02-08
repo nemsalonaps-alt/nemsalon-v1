@@ -35,3 +35,28 @@ export async function checkSupabaseConnection(logger?: Logger) {
     return { ok: false, error: message };
   }
 }
+
+export async function checkSupabaseMigrations(logger?: Logger) {
+  try {
+    const supabase = getSupabaseClient();
+    const { data, error } = await supabase
+      .schema('supabase_migrations')
+      .from('schema_migrations')
+      .select('version')
+      .order('version', { ascending: false })
+      .limit(1);
+    if (error) {
+      logger?.error?.({ error: error.message }, 'Supabase migrations check failed');
+      return { ok: false, error: error.message };
+    }
+    if (!data || data.length === 0) {
+      logger?.warn?.({}, 'Supabase migrations table empty');
+      return { ok: false, error: 'No migrations found.' };
+    }
+    return { ok: true, version: data[0]?.version };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    logger?.error?.({ error: message }, 'Supabase migrations check crashed');
+    return { ok: false, error: message };
+  }
+}

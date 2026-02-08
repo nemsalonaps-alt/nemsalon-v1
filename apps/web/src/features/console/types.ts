@@ -1,10 +1,13 @@
 export type SalonSummary = {
   id: string;
   name: string;
+  slug?: string | null;
   status: 'draft' | 'active';
   timezone: string;
   locale: string;
+  salonType?: string | null;
   currency: string;
+  cancellationWindowMinutes: number;
 };
 
 export type AuthMeResponse = {
@@ -15,6 +18,23 @@ export type AuthMeResponse = {
     phone?: string | null;
     primarySalonId?: string | null;
   };
+  memberships: Array<{
+    id: string;
+    salonId: string;
+    role: 'owner' | 'admin' | 'staff';
+    active: boolean;
+    salon?: {
+      id: string;
+      name?: string | null;
+      slug?: string | null;
+      status?: 'draft' | 'active';
+      locale?: string | null;
+      salonType?: string | null;
+      currency?: string | null;
+      timezone?: string | null;
+      cancellationWindowMinutes?: number | null;
+    };
+  }>;
   salon?: SalonSummary | null;
   primarySalonId?: string | null;
 };
@@ -24,6 +44,7 @@ export type StaffProfile = {
   name: string;
   role: 'owner' | 'admin' | 'staff';
   active: boolean;
+  userId?: string | null;
   email?: string | null;
   phone?: string | null;
 };
@@ -69,6 +90,44 @@ export type AvailabilitySlot = {
   staffId: string;
 };
 
+export type PlatformSalon = {
+  id: string;
+  name: string;
+  slug?: string | null;
+  status?: string | null;
+  locale: string;
+  salonType?: string | null;
+  currency: string;
+  timezone: string;
+  cancellationWindowMinutes: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PlatformAuditEntry = {
+  id: string;
+  salon_id?: string | null;
+  actor_user_id?: string | null;
+  action: string;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type PlatformPayment = {
+  id: string;
+  salon_id: string;
+  booking_id: string;
+  provider: string;
+  status: string;
+  amount: number;
+  currency: string;
+  provider_reference?: string | null;
+  provider_event_id?: string | null;
+  created_at: string;
+};
+
 export type AvailabilityResponse = {
   slots: AvailabilitySlot[];
   meta: {
@@ -104,4 +163,17 @@ export type Payment = {
   amount: number;
   currency: string;
   providerReference?: string | null;
+};
+
+export type DashboardKPIs = {
+  todayBookings: { total: number; completed: number; remaining: number };
+  todayRevenue: { amount: number; currency: string; confirmedAmount: number };
+  upcoming: { total: number; nextBooking: BookingSummary | null };
+  systemStatus: 'healthy' | 'action-required';
+  alerts: Array<{ type: 'payment' | 'webhook'; message: string; actionLink?: string }>;
+};
+
+export type DashboardData = {
+  todayBookings: BookingSummary[];
+  kpis: DashboardKPIs;
 };

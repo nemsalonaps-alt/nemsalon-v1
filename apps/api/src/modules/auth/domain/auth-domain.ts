@@ -14,10 +14,13 @@ export type Membership = {
   salon?: {
     id: string;
     name: string;
+    slug?: string | null;
     status?: 'draft' | 'active';
     locale: string;
+    salonType?: string | null;
     currency: string;
     timezone: string;
+    cancellationWindowMinutes: number;
   };
 };
 

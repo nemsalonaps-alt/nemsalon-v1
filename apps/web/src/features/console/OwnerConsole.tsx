@@ -1,39 +1,52 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   assignStaffServices,
   cancelBooking,
   createBooking,
+  createBookingAccessToken,
   createCheckout,
+  createCustomer,
   createService,
   createStaff,
   createStaffTimeOff,
   deleteStaffTimeOff,
   fetchAvailability,
+  fetchDashboardData,
   fetchMe,
   getBooking,
   getBusinessHours,
   getPayment,
+  getStaffWorkingHours,
+  inviteStaff,
   listBookings,
   listCustomers,
   listServices,
   listStaff,
   listStaffServices,
   listStaffTimeOff,
+  reconcilePayment,
+  refundPayment,
   rescheduleBooking,
+  setStaffWorkingHours,
   setBusinessHours,
   updateBookingStatus,
+  updateCustomer,
   updateService,
   updateStaff
 } from './api';
 import { Gate } from '../onboarding/pages/Gate';
 import type { GateState } from '../onboarding/types';
 import { onAuthStateChange } from '../../lib/auth';
-import { copy } from '../../i18n';
+import { getCopy, getStoredLocale, setStoredLocale } from '../../i18n';
+import { ConfirmDialog } from '@nemsalon/ui';
+import { buildBookingConfirmationUrl, buildBookingManageUrl } from '../../lib/public-url';
+import { LogoutButton } from '../auth/components/UnifiedLogin';
 import type {
   AuthMeResponse,
   BookingSummary,
   BusinessHoursEntry,
   Customer,
+  DashboardData,
   Service,
   StaffProfile,
   StaffTimeOff
@@ -41,6 +54,30 @@ import type {
 
 type TabKey = 'home' | 'calendar' | 'create' | 'details' | 'settings';
 type ConsoleGateState = GateState | 'ready';
+type LiveEvent = {
+  id: string;
+  label: string;
+  detail?: string;
+  timestamp: string;
+};
+
+type ConfirmState = {
+  title: string;
+  body: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  showReason?: boolean;
+  reasonLabel?: string;
+  reasonPlaceholder?: string;
+  reasonRequired?: boolean;
+  onConfirm: () => void;
+  onConfirmWithReason?: (reason: string) => void;
+};
+
+type OwnerConsoleProps = {
+  initialMe?: AuthMeResponse | null;
+  skipGate?: boolean;
+};
 
 const initialHours: BusinessHoursEntry[] = [
   { day: 'mon', startTime: '09:00', endTime: '17:00', enabled: true },
@@ -52,15 +89,24 @@ const initialHours: BusinessHoursEntry[] = [
   { day: 'sun', startTime: '09:00', endTime: '17:00', enabled: false }
 ];
 
+function getLocaleTag() {
+  return getStoredLocale() === 'da' ? 'da-DK' : 'en-US';
+}
+
 function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleString('da-DK', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' });
+  return date.toLocaleString(getLocaleTag(), {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: 'short'
+  });
 }
 
 function formatCurrency(amount: number, currency: string) {
   try {
-    return new Intl.NumberFormat('da-DK', { style: 'currency', currency }).format(amount);
+    return new Intl.NumberFormat(getLocaleTag(), { style: 'currency', currency }).format(amount);
   } catch {
     return `${amount.toFixed(2)} ${currency}`;
   }
@@ -71,13 +117,29 @@ function toUtcIso(date: string, time: string) {
   return value.toISOString();
 }
 
-export function OwnerConsole() {
+export function OwnerConsole({ initialMe = null, skipGate = false }: OwnerConsoleProps = {}) {
   const [activeTab, setActiveTab] = useState<TabKey>('home');
-  const [gateState, setGateState] = useState<ConsoleGateState>('checking');
-  const [me, setMe] = useState<AuthMeResponse | null>(null);
+  const [gateState, setGateState] = useState<ConsoleGateState>(skipGate ? 'ready' : 'checking');
+  const [me, setMe] = useState<AuthMeResponse | null>(initialMe);
+  const [notificationTest, setNotificationTest] = useState<LiveEvent | null>(null);
   const [staff, setStaff] = useState<StaffProfile[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerForm, setCustomerForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    notes: ''
+  });
+  const [customerEditId, setCustomerEditId] = useState('');
+  const [customerEdit, setCustomerEdit] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    notes: ''
+  });
+  const [customerBusy, setCustomerBusy] = useState(false);
+  const [customerStatus, setCustomerStatus] = useState('');
   const [businessHours, setBusinessHoursState] = useState<BusinessHoursEntry[]>(initialHours);
   const [bookings, setBookings] = useState<BookingSummary[]>([]);
   const [selectedBookingId, setSelectedBookingId] = useState<string>('');
@@ -99,14 +161,104 @@ export function OwnerConsole() {
   const [timeOffStart, setTimeOffStart] = useState('');
   const [timeOffEnd, setTimeOffEnd] = useState('');
   const [timeOffReason, setTimeOffReason] = useState('');
+  const [staffHoursTarget, setStaffHoursTarget] = useState('');
+  const [staffHoursWeekly, setStaffHoursWeekly] = useState<BusinessHoursEntry[]>(initialHours);
+  const [staffHoursStatus, setStaffHoursStatus] = useState('');
   const [staffServicesSelection, setStaffServicesSelection] = useState<string[]>([]);
   const [staffServicesTarget, setStaffServicesTarget] = useState<string>('');
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [checkoutLink, setCheckoutLink] = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const copy = getCopy(me?.salon?.locale);
 
   const salonId = me?.primarySalonId ?? me?.salon?.id ?? '';
 
   const staffById = useMemo(() => new Map(staff.map((entry) => [entry.id, entry])), [staff]);
-  const serviceById = useMemo(() => new Map(services.map((entry) => [entry.id, entry])), [services]);
+  const hydratedRef = useRef(false);
+
+  function setNotificationTestBanner(label: string, detail?: string) {
+    setNotificationTest({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      label,
+      detail,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  function openConfirm(state: ConfirmState) {
+    setConfirmState(state);
+  }
+
+  function closeConfirm() {
+    setConfirmState(null);
+  }
+
+  function confirmAction(
+    state: Omit<ConfirmState, 'onConfirm'>,
+    action: () => void | Promise<void>
+  ) {
+    openConfirm({
+      ...state,
+      onConfirm: () => {
+        closeConfirm();
+        void action();
+      }
+    });
+  }
+
+  function confirmActionWithReason(
+    state: Omit<ConfirmState, 'onConfirm' | 'onConfirmWithReason'>,
+    action: (reason: string) => void | Promise<void>
+  ) {
+    openConfirm({
+      ...state,
+      showReason: true,
+      onConfirm: closeConfirm,
+      onConfirmWithReason: (reason) => {
+        closeConfirm();
+        void action(reason);
+      }
+    });
+  }
+
+  async function refreshCustomers(limit = 200) {
+    const customerResult = await listCustomers(limit);
+    if (customerResult.ok) setCustomers(customerResult.data.data);
+  }
+
+  async function loadDashboard() {
+    setDashboardLoading(true);
+    setDashboardError(null);
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await fetchDashboardData(today);
+    setDashboardLoading(false);
+    if (!result.ok) {
+      setDashboardError(result.error);
+      return;
+    }
+    setDashboardData(result.data);
+  }
+
+  async function hydrateConsole(meData: AuthMeResponse) {
+    setMe(meData);
+    setGateState('ready');
+    if (meData.salon?.locale) {
+      setStoredLocale(meData.salon.locale);
+    }
+    setNotificationTestBanner('Console live', meData.salon?.name ?? undefined);
+    const staffResult = await listStaff();
+    if (staffResult.ok) setStaff(staffResult.data.data);
+    const serviceResult = await listServices();
+    if (serviceResult.ok) setServices(serviceResult.data.data);
+    await refreshCustomers();
+    if (meData.primarySalonId) {
+      const hoursResult = await getBusinessHours(meData.primarySalonId);
+      if (hoursResult.ok) setBusinessHoursState(hoursResult.data.weekly);
+    }
+  }
 
   useEffect(() => {
     if (gateState !== 'checking') return;
@@ -122,18 +274,9 @@ export function OwnerConsole() {
         }
         return;
       }
-      setMe(meResult.data);
-      setGateState('ready');
-      const staffResult = await listStaff();
-      if (staffResult.ok) setStaff(staffResult.data.data);
-      const serviceResult = await listServices();
-      if (serviceResult.ok) setServices(serviceResult.data.data);
-      const customerResult = await listCustomers();
-      if (customerResult.ok) setCustomers(customerResult.data.data);
-      if (meResult.data.primarySalonId) {
-        const hoursResult = await getBusinessHours(meResult.data.primarySalonId);
-        if (hoursResult.ok) setBusinessHoursState(hoursResult.data.weekly);
-      }
+      if (hydratedRef.current) return;
+      hydratedRef.current = true;
+      await hydrateConsole(meResult.data);
     }
     load();
     return () => {
@@ -142,13 +285,26 @@ export function OwnerConsole() {
   }, [gateState]);
 
   useEffect(() => {
+    if (!skipGate || !initialMe || hydratedRef.current) return;
+    hydratedRef.current = true;
+    hydrateConsole(initialMe);
+  }, [skipGate, initialMe]);
+
+  useEffect(() => {
     const subscription = onAuthStateChange(() => {
+      hydratedRef.current = false;
       setGateState('checking');
     });
     return () => {
       subscription?.data.subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'home' && gateState === 'ready') {
+      void loadDashboard();
+    }
+  }, [activeTab, gateState]);
 
   useEffect(() => {
     if (!calendarDate || !salonId) return;
@@ -200,7 +356,7 @@ export function OwnerConsole() {
       ? staffServicesSelection.filter((id) => id !== serviceId)
       : [...staffServicesSelection, serviceId];
     if (next.length === 0) {
-      setStatusMessage(copy.validation.staff.serviceRequired);
+      setStatusMessage(copy.console.validation.staff.serviceRequired);
       return;
     }
     setStaffServicesSelection(next);
@@ -214,7 +370,7 @@ export function OwnerConsole() {
     }
   }
 
-  async function handleCreateBooking(slotStart: string, slotEnd: string, staffId: string) {
+  async function handleCreateBooking(slotStart: string, _slotEnd: string, staffId: string) {
     if (!selectedServiceId) return;
     if (!selectedCustomerId && !customerName.trim()) {
       setStatusMessage('Tilføj kundeoplysninger eller vælg en kunde.');
@@ -235,18 +391,47 @@ export function OwnerConsole() {
     });
     if (!result.ok) {
       setStatusMessage(`Booking fejlede: ${result.error}`);
+      setCheckoutLink(null);
       return;
     }
-    const checkout = await createCheckout(result.data.id);
+    const slug = me?.salon?.slug ?? '';
+    if (!slug) {
+      setStatusMessage('Salon slug mangler. Gem salon-oplysninger først.');
+      setCheckoutLink(null);
+      return;
+    }
+    const tokenResult = await createBookingAccessToken(result.data.id);
+    if (!tokenResult.ok) {
+      setStatusMessage(`Kunne ikke skabe booking-token: ${tokenResult.error}`);
+      setCheckoutLink(null);
+      return;
+    }
+    const successUrl = buildBookingConfirmationUrl({
+      salonSlug: slug,
+      bookingId: result.data.id,
+      token: tokenResult.data.bookingToken
+    });
+    const cancelUrl = buildBookingManageUrl({
+      salonSlug: slug,
+      bookingId: result.data.id,
+      token: tokenResult.data.bookingToken
+    });
+    const checkout = await createCheckout({
+      bookingId: result.data.id,
+      successUrl,
+      cancelUrl
+    });
     if (!checkout.ok) {
       const hint =
         checkout.error.includes('config') || checkout.error.includes('CONFIG')
           ? ' (mangler betalings-setup eller mock mode)'
           : '';
       setStatusMessage(`Checkout fejlede: ${checkout.error}${hint}`);
+      setCheckoutLink(null);
       return;
     }
-    setStatusMessage(`Booking oprettet. Checkout: ${checkout.data.checkoutUrl}`);
+    setStatusMessage('Booking oprettet. Klar til betaling.');
+    setCheckoutLink(checkout.data.checkoutUrl);
   }
 
   async function handleCustomBooking() {
@@ -298,9 +483,12 @@ export function OwnerConsole() {
     }
   }
 
-  async function handleCancelBooking() {
+  async function handleCancelBooking(reason?: string) {
     if (!selectedBookingId) return;
-    const result = await cancelBooking(selectedBookingId, { reasonKey: 'owner.cancel' });
+    const result = await cancelBooking(selectedBookingId, {
+      reasonKey: 'owner.cancel',
+      note: reason || undefined
+    });
     if (result.ok) {
       setStatusMessage('Booking annulleret.');
       refreshBookings(calendarDate, calendarStaffId || undefined);
@@ -329,6 +517,43 @@ export function OwnerConsole() {
     } else {
       setStatusMessage(result.error);
     }
+  }
+
+  async function handleRefundPayment(reason?: string) {
+    const booking = bookings.find((entry) => entry.id === selectedBookingId);
+    const paymentId = booking?.paymentId;
+    if (!paymentId) {
+      setStatusMessage(copy.console.paymentMissing);
+      return;
+    }
+    const result = await refundPayment(paymentId, {
+      idempotencyKey: `refund:${paymentId}`,
+      reason
+    });
+    if (!result.ok) {
+      setStatusMessage(copy.console.refundFailed);
+      return;
+    }
+    setStatusMessage(result.data.idempotent ? copy.console.refundIdempotent : copy.console.refundSuccess);
+    refreshBookings(calendarDate, calendarStaffId || undefined);
+  }
+
+  async function handleReconcilePayment() {
+    const booking = bookings.find((entry) => entry.id === selectedBookingId);
+    const paymentId = booking?.paymentId;
+    if (!paymentId) {
+      setStatusMessage(copy.console.paymentMissing);
+      return;
+    }
+    const result = await reconcilePayment(paymentId);
+    if (!result.ok) {
+      setStatusMessage(copy.console.reconcileFailed);
+      return;
+    }
+    setStatusMessage(
+      result.data.action === 'updated' ? copy.console.reconcileUpdated : copy.console.reconcileNoop
+    );
+    refreshBookings(calendarDate, calendarStaffId || undefined);
   }
 
   async function refreshBookings(date: string, staffId?: string) {
@@ -364,6 +589,20 @@ export function OwnerConsole() {
     }
   }
 
+  async function handleInviteStaff(entry: StaffProfile) {
+    const email = prompt('Invite email?', entry.email ?? '');
+    if (!email) return;
+    const role = entry.role === 'admin' ? 'admin' : 'staff';
+    const result = await inviteStaff(entry.id, { email, role });
+    if (!result.ok) {
+      setStatusMessage(`Invite fejlede: ${result.error}`);
+      return;
+    }
+    setStaff((prev) => prev.map((item) => (item.id === entry.id ? result.data.staff : item)));
+    const linkHint = result.data.actionLink ? ` (link: ${result.data.actionLink})` : '';
+    setStatusMessage(`Invite sendt til ${result.data.email}.${linkHint}`);
+  }
+
   async function handleCreateService() {
     const name = prompt('Service navn?');
     if (!name) return;
@@ -396,10 +635,93 @@ export function OwnerConsole() {
     }
   }
 
+  function resetCustomerForm() {
+    setCustomerForm({ name: '', email: '', phone: '', notes: '' });
+  }
+
+  function handleSelectCustomer(customer: Customer) {
+    setCustomerEditId(customer.id);
+    setCustomerEdit({
+      name: customer.name ?? '',
+      email: customer.email ?? '',
+      phone: customer.phone ?? '',
+      notes: customer.notes ?? ''
+    });
+  }
+
+  async function handleCreateCustomer() {
+    if (!customerForm.name.trim()) {
+      setCustomerStatus('Navn er påkrævet.');
+      return;
+    }
+    setCustomerBusy(true);
+    setCustomerStatus('');
+    const result = await createCustomer({
+      name: customerForm.name.trim(),
+      email: customerForm.email || undefined,
+      phone: customerForm.phone || undefined,
+      notes: customerForm.notes || undefined
+    });
+    setCustomerBusy(false);
+    if (!result.ok) {
+      setCustomerStatus(result.error);
+      return;
+    }
+    resetCustomerForm();
+    await refreshCustomers();
+    setCustomerStatus('Kunde oprettet.');
+  }
+
+  async function handleUpdateCustomer() {
+    if (!customerEditId) return;
+    if (!customerEdit.name.trim()) {
+      setCustomerStatus('Navn er påkrævet.');
+      return;
+    }
+    setCustomerBusy(true);
+    setCustomerStatus('');
+    const result = await updateCustomer(customerEditId, {
+      name: customerEdit.name.trim(),
+      email: customerEdit.email || undefined,
+      phone: customerEdit.phone || undefined,
+      notes: customerEdit.notes || undefined
+    });
+    setCustomerBusy(false);
+    if (!result.ok) {
+      setCustomerStatus(result.error);
+      return;
+    }
+    await refreshCustomers();
+    setCustomerStatus('Kunde opdateret.');
+  }
+
   async function handleLoadTimeOff(staffId: string) {
     const result = await listStaffTimeOff(staffId);
     if (result.ok) {
       setTimeOffEntries(result.data.data);
+    }
+  }
+
+  async function handleLoadStaffWorkingHours(staffId: string) {
+    setStaffHoursStatus('');
+    const result = await getStaffWorkingHours(staffId);
+    if (result.ok && result.data.weekly.length > 0) {
+      setStaffHoursWeekly(result.data.weekly);
+      return;
+    }
+    setStaffHoursWeekly(businessHours);
+  }
+
+  async function handleSaveStaffWorkingHours() {
+    if (!staffHoursTarget) {
+      setStaffHoursStatus('Vælg en medarbejder først.');
+      return;
+    }
+    const result = await setStaffWorkingHours(staffHoursTarget, staffHoursWeekly);
+    if (result.ok) {
+      setStaffHoursStatus('Arbejdstider gemt.');
+    } else {
+      setStaffHoursStatus(result.error);
     }
   }
 
@@ -441,15 +763,37 @@ export function OwnerConsole() {
 
   return (
     <div className="app console">
+      <div className="live-bar">
+        <div className="live-pill">LIVE</div>
+        <div className="live-items">
+          {notificationTest ? (
+            <span key={notificationTest.id} className="live-item">
+              <strong>{notificationTest.label}</strong>
+              {notificationTest.detail ? ` — ${notificationTest.detail}` : ''}
+              <em>
+                {new Date(notificationTest.timestamp).toLocaleTimeString('da-DK', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </em>
+            </span>
+          ) : (
+            <span className="live-empty">Notifikationstest ikke kørt endnu</span>
+          )}
+        </div>
+      </div>
       <header className="console-header">
         <div>
           <p className="eyebrow">Owner Console v0</p>
           <h1>{me?.salon?.name ?? 'Salon'}</h1>
           <p className="muted">Status: {me?.salon?.status ?? 'draft'}</p>
         </div>
-        <div className="status-pill">
-          <span>Setup</span>
-          <strong>{setupCompleteness.staff} staff / {setupCompleteness.services} services / {setupCompleteness.hours} days</strong>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div className="status-pill">
+            <span>Setup</span>
+            <strong>{setupCompleteness.staff} staff / {setupCompleteness.services} services / {setupCompleteness.hours} days</strong>
+          </div>
+          <LogoutButton />
         </div>
       </header>
 
@@ -469,60 +813,341 @@ export function OwnerConsole() {
         ))}
       </nav>
 
-      {statusMessage && <div className="console-banner">{statusMessage}</div>}
+      {statusMessage && (
+        <div className="console-banner">
+          <span>{statusMessage}</span>
+          {checkoutLink && statusMessage.startsWith('Booking oprettet') && (
+            <a className="btn primary" href={checkoutLink} target="_blank" rel="noreferrer">
+              Åbn checkout
+            </a>
+          )}
+        </div>
+      )}
 
       {activeTab === 'home' && (
-        <section className="panel">
-          <h2>Quick actions</h2>
-          <div className="grid three">
-            <button className="btn primary" onClick={() => setActiveTab('create')}>Create booking</button>
-            <button className="btn ghost" onClick={() => setActiveTab('calendar')}>View calendar</button>
-            <button className="btn ghost" onClick={() => setActiveTab('settings')}>Settings</button>
+        <section className="panel dashboard">
+          {/* KPI Boxes */}
+          <div className="kpi-grid">
+            {dashboardLoading ? (
+              <>
+                <div className="skeleton skeleton-box" />
+                <div className="skeleton skeleton-box" />
+                <div className="skeleton skeleton-box" />
+                <div className="skeleton skeleton-box" />
+              </>
+            ) : dashboardData ? (
+              <>
+                <div className="kpi-box" onClick={() => setActiveTab('calendar')}>
+                  <p className="kpi-box-title">{copy.console.dashboard.kpis.todayBookings}</p>
+                  <p className="kpi-primary">{dashboardData.kpis.todayBookings.total}</p>
+                  <p className="kpi-secondary">
+                    {dashboardData.kpis.todayBookings.completed} {copy.console.dashboard.kpis.completed} · {dashboardData.kpis.todayBookings.remaining} {copy.console.dashboard.kpis.remaining}
+                  </p>
+                </div>
+                <div className="kpi-box">
+                  <p className="kpi-box-title">{copy.console.dashboard.kpis.todayRevenue}</p>
+                  <p className="kpi-primary">
+                    {dashboardData.kpis.todayRevenue.amount > 0
+                      ? formatCurrency(dashboardData.kpis.todayRevenue.amount / 100, dashboardData.kpis.todayRevenue.currency)
+                      : '0'}
+                  </p>
+                  <p className="kpi-secondary">
+                    {dashboardData.kpis.todayRevenue.confirmedAmount > 0
+                      ? `${formatCurrency(dashboardData.kpis.todayRevenue.confirmedAmount / 100, dashboardData.kpis.todayRevenue.currency)} ${copy.console.dashboard.kpis.confirmedAmount}`
+                      : copy.console.dashboard.kpis.noRevenueYet}
+                  </p>
+                </div>
+                <div className="kpi-box">
+                  <p className="kpi-box-title">{copy.console.dashboard.kpis.upcomingBookings}</p>
+                  <p className="kpi-primary">{dashboardData.kpis.upcoming.total}</p>
+                  <p className="kpi-secondary">
+                    {dashboardData.kpis.upcoming.nextBooking
+                      ? `${copy.console.dashboard.kpis.nextBookingAt} ${new Date(dashboardData.kpis.upcoming.nextBooking.startTime).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}`
+                      : ''}
+                  </p>
+                </div>
+                <div
+                  className={`kpi-box ${dashboardData.kpis.systemStatus === 'action-required' ? 'alert' : ''}`}
+                  onClick={() => {
+                    if (dashboardData.kpis.alerts[0]) setActiveTab('calendar');
+                  }}
+                >
+                  <p className="kpi-box-title">{copy.console.dashboard.kpis.systemStatus}</p>
+                  <p className="kpi-primary">
+                    {dashboardData.kpis.systemStatus === 'healthy' ? copy.console.dashboard.kpis.allGood : copy.console.dashboard.kpis.actionRequired}
+                  </p>
+                  <p className="kpi-secondary">
+                    {dashboardData.kpis.alerts[0]?.message ?? copy.console.dashboard.kpis.noIssues}
+                  </p>
+                </div>
+              </>
+            ) : null}
           </div>
-          <p className="muted">Seneste status: {statusMessage || 'klar til test.'}</p>
+
+          {/* Error State */}
+          {dashboardError && (
+            <div className="dashboard-error">
+              <p>{copy.console.dashboard.error}</p>
+              <button className="btn ghost" onClick={loadDashboard}>{copy.console.dashboard.retry}</button>
+            </div>
+          )}
+
+          {/* Today's Bookings */}
+          <div className="dashboard-section">
+            <h2>{copy.console.dashboard.bookings.title}</h2>
+            {dashboardLoading ? (
+              <div className="booking-list">
+                <div className="skeleton skeleton-row" />
+                <div className="skeleton skeleton-row" />
+                <div className="skeleton skeleton-row" />
+              </div>
+            ) : dashboardData && dashboardData.todayBookings.length > 0 ? (
+              <div className="booking-list">
+                {dashboardData.todayBookings
+                  .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                  .map((booking) => (
+                    <div
+                      key={booking.id}
+                      className={`booking-row ${booking.status}`}
+                      onClick={() => {
+                        setSelectedBookingId(booking.id);
+                        setActiveTab('details');
+                      }}
+                    >
+                      <span className="booking-time">
+                        {new Date(booking.startTime).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })} – {' '}
+                        {new Date(booking.endTime).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className="booking-customer">{booking.customerName || copy.console.dashboard.bookings.unknownCustomer}</span>
+                      <span className="booking-service">{booking.serviceName || booking.serviceId}</span>
+                      <span className="booking-staff">{booking.staffName || booking.staffId}</span>
+                      <span className={`status-badge ${booking.status}`}>
+                        {booking.status === 'confirmed' && copy.console.dashboard.bookings.status.confirmed}
+                        {booking.status === 'in_progress' && copy.console.dashboard.bookings.status.in_progress}
+                        {booking.status === 'completed' && copy.console.dashboard.bookings.status.completed}
+                        {booking.status === 'no_show' && copy.console.dashboard.bookings.status.no_show}
+                        {booking.status === 'cancelled' && copy.console.dashboard.bookings.status.cancelled}
+                        {booking.status === 'pending' && copy.console.dashboard.bookings.status.pending}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <h3>{copy.console.dashboard.bookings.emptyTitle}</h3>
+                <p>{copy.console.dashboard.bookings.emptyBody}</p>
+                <div className="empty-state-actions">
+                  <button className="btn primary" onClick={() => setActiveTab('create')}>{copy.console.dashboard.bookings.createBooking}</button>
+                  <button className="btn ghost" onClick={() => setActiveTab('calendar')}>{copy.console.dashboard.bookings.viewCalendar}</button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Actions */}
+          <div className="quick-actions">
+            <div className="quick-actions-primary">
+              <button className="btn primary" onClick={() => setActiveTab('create')}>{copy.console.dashboard.quickActions.createManual}</button>
+              <button className="btn ghost" onClick={() => setActiveTab('calendar')}>{copy.console.dashboard.quickActions.goToCalendar}</button>
+              <button className="btn ghost" onClick={() => setActiveTab('settings')}>{copy.console.dashboard.quickActions.viewStaff}</button>
+            </div>
+            <div className="quick-actions-secondary">
+              <a href="#" onClick={(e) => { e.preventDefault(); setActiveTab('settings'); }}>{copy.console.dashboard.quickActions.settings}</a>
+              <a href="mailto:support@nemsalon.dk">{copy.console.dashboard.quickActions.support}</a>
+            </div>
+          </div>
         </section>
       )}
 
       {activeTab === 'calendar' && (
-        <section className="panel">
-          <h2>Calendar (read-only)</h2>
-          <div className="grid three">
-            <label className="field">
-              <span className="label">Dato</span>
-              <input className="input" type="date" value={calendarDate} onChange={(event) => setCalendarDate(event.target.value)} />
-            </label>
-            <label className="field">
-              <span className="label">Staff filter</span>
-              <select className="select" value={calendarStaffId} onChange={(event) => setCalendarStaffId(event.target.value)}>
-                <option value="">Alle</option>
-                {staff.map((entry) => (
-                  <option key={entry.id} value={entry.id}>{entry.name}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="list">
-            {bookings.map((booking) => (
-              <button
-                key={booking.id}
-                className={`list-card ${selectedBookingId === booking.id ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedBookingId(booking.id);
-                  setActiveTab('details');
-                }}
-              >
-                <div>
-                  <strong>{formatDateTime(booking.startTime)}</strong>
-                  <p className="muted">{booking.customerName || booking.customerId}</p>
-                </div>
-                <div className="list-meta">
-                  <span>{booking.serviceName || booking.serviceId}</span>
-                  <span>{booking.staffName || booking.staffId}</span>
-                  <span>{booking.status}</span>
-                  <span>{booking.paymentStatus || 'no payment'}</span>
-                </div>
+        <section className="panel calendar">
+          {/* Topbar */}
+          <div className="calendar-topbar">
+            <div className="calendar-nav">
+              <button className="btn ghost" onClick={() => {
+                const d = new Date(calendarDate);
+                d.setDate(d.getDate() - 1);
+                setCalendarDate(d.toISOString().slice(0, 10));
+              }}>←</button>
+              <button className="btn ghost" onClick={() => setCalendarDate(new Date().toISOString().slice(0, 10))}>
+                {copy.console.calendar.today}
               </button>
-            ))}
+              <button className="btn ghost" onClick={() => {
+                const d = new Date(calendarDate);
+                d.setDate(d.getDate() + 1);
+                setCalendarDate(d.toISOString().slice(0, 10));
+              }}>→</button>
+              <input
+                type="date"
+                className="calendar-date-input"
+                value={calendarDate}
+                onChange={(e) => setCalendarDate(e.target.value)}
+              />
+            </div>
+            <div className="calendar-view-switch">
+              <button className="active">{copy.console.calendar.dayView}</button>
+              <button disabled>{copy.console.calendar.weekView}</button>
+            </div>
+            <button className="btn primary" onClick={() => setActiveTab('create')}>
+              {copy.console.calendar.createBooking}
+            </button>
+          </div>
+
+          {/* Main Calendar */}
+          <div className="calendar-main">
+            {/* Staff Column */}
+            <div className="calendar-staff-column">
+              <p className="calendar-staff-header">{copy.console.calendar.selectStaff}</p>
+              <div className="calendar-staff-list">
+                <div
+                  className={`calendar-staff-item ${!calendarStaffId ? 'active' : ''}`}
+                  onClick={() => setCalendarStaffId('')}
+                >
+                  <span className="calendar-staff-color" style={{ background: 'var(--accent)' }} />
+                  <span className="calendar-staff-name calendar-staff-all">{copy.console.calendar.allStaff}</span>
+                </div>
+                {staff.map((s, idx) => (
+                  <div
+                    key={s.id}
+                    className={`calendar-staff-item ${calendarStaffId === s.id ? 'active' : ''}`}
+                    onClick={() => setCalendarStaffId(s.id)}
+                  >
+                    <span
+                      className="calendar-staff-color"
+                      style={{ background: `hsl(${(idx * 60) % 360}, 60%, 45%)` }}
+                    />
+                    <span className="calendar-staff-name">{s.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Time Grid */}
+            <div className="calendar-grid-container">
+              {(() => {
+                // Generate time slots (7:00 - 20:00, 15 min intervals)
+                const hours = [];
+                for (let h = 7; h <= 20; h++) {
+                  for (let m = 0; m < 60; m += 15) {
+                    hours.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+                  }
+                }
+
+                const filteredStaff = calendarStaffId
+                  ? staff.filter((s) => s.id === calendarStaffId)
+                  : staff;
+
+                // Get business hours for the day
+                const dayOfWeek = new Date(calendarDate).getDay();
+                const dayNames = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+                const dayName = dayNames[dayOfWeek];
+                const todayHours = businessHours.find((h) => h.day.toLowerCase() === dayName);
+                const isWithinBusinessHours = (time: string) => {
+                  if (!todayHours?.enabled) return false;
+                  return time >= todayHours.startTime && time < todayHours.endTime;
+                };
+
+                // Filter bookings for the day
+                const dayBookings = bookings.filter((b) => {
+                  const bookingDate = new Date(b.startTime).toISOString().slice(0, 10);
+                  return bookingDate === calendarDate;
+                });
+
+                if (dayBookings.length === 0 && filteredStaff.length === 0) {
+                  return (
+                    <div className="calendar-empty">
+                      <h3>{copy.console.calendar.noBookings}</h3>
+                      <p>{copy.console.dashboard.bookings.emptyBody}</p>
+                      <div className="calendar-empty-actions">
+                        <button className="btn primary" onClick={() => setActiveTab('create')}>
+                          {copy.console.calendar.createBooking}
+                        </button>
+                        <button className="btn ghost" onClick={() => setCalendarDate(new Date().toISOString().slice(0, 10))}>
+                          {copy.console.calendar.goToToday}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <>
+                    <div className="calendar-grid-header">
+                      <div className="calendar-grid-time-label" />
+                      {filteredStaff.map((s) => (
+                        <div key={s.id} className="calendar-grid-staff-header">
+                          {s.name}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="calendar-grid-body">
+                      <div className="calendar-grid-rows">
+                        {hours.map((time, idx) => {
+                          const inBusinessHours = isWithinBusinessHours(time);
+                          const rowBookings = dayBookings.filter((b) => {
+                            const bookingHour = Math.floor(new Date(b.startTime).getTime() / (15 * 60 * 1000)) * (15 * 60 * 1000);
+                            const slotHour = Math.floor(new Date(`${calendarDate}T${time}`).getTime() / (15 * 60 * 1000)) * (15 * 60 * 1000);
+                            return bookingHour === slotHour;
+                          });
+
+                          return (
+                            <div
+                              key={time}
+                              className={`calendar-grid-row ${!inBusinessHours ? 'outside-hours' : ''}`}
+                            >
+                              {idx % 4 === 0 ? (
+                                <div className="calendar-grid-time">{time}</div>
+                              ) : (
+                                <div className="calendar-grid-time" />
+                              )}
+                              {filteredStaff.map((s) => {
+                                const staffBooking = rowBookings.find((b) => b.staffId === s.id);
+                                return (
+                                  <div key={s.id} className="calendar-grid-cell">
+                                    {staffBooking && (
+                                      <div
+                                        className={`calendar-booking ${staffBooking.status}`}
+                                        style={{
+                                          height: `${(new Date(staffBooking.endTime).getTime() - new Date(staffBooking.startTime).getTime()) / (15 * 60 * 1000) * 40 - 2}px`,
+                                          zIndex: 10
+                                        }}
+                                        onClick={() => {
+                                          setSelectedBookingId(staffBooking.id);
+                                          setActiveTab('details');
+                                        }}
+                                      >
+                                        <div className="calendar-booking-time">
+                                          {new Date(staffBooking.startTime).toLocaleTimeString('da-DK', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })} - {new Date(staffBooking.endTime).toLocaleTimeString('da-DK', {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                          })}
+                                        </div>
+                                        <div className="calendar-booking-customer">
+                                          {staffBooking.customerName || copy.console.dashboard.bookings.unknownCustomer}
+                                        </div>
+                                        <div className="calendar-booking-service">
+                                          {staffBooking.serviceName || staffBooking.serviceId}
+                                        </div>
+                                        <span className={`calendar-booking-status ${staffBooking.status}`}>
+                                          {copy.console.dashboard.bookings.status[staffBooking.status as keyof typeof copy.console.dashboard.bookings.status] || staffBooking.status}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           </div>
         </section>
       )}
@@ -691,8 +1316,59 @@ export function OwnerConsole() {
               <div className="panel subtle">
                 <h3>Actions</h3>
                 <div className="grid two">
-                  <button className="btn ghost" onClick={handleCancelBooking}>Cancel booking</button>
-                  <button className="btn ghost" onClick={handleForceConfirm}>Mark confirmed</button>
+                  <button
+                    className="btn ghost"
+                    onClick={() =>
+                      confirmActionWithReason(
+                        {
+                          title: 'Annuller booking',
+                          body: 'Skriv evt. en kort årsag til annulleringen (sendes med i booking-noten).',
+                          reasonLabel: 'Årsag',
+                          reasonPlaceholder: 'Fx kunden aflyste',
+                          confirmLabel: 'Annuller booking'
+                        },
+                        handleCancelBooking
+                      )
+                    }
+                  >
+                    Cancel booking
+                  </button>
+                  <button
+                    className="btn ghost"
+                    onClick={() =>
+                      confirmAction(
+                        {
+                          title: 'Bekræft booking',
+                          body: 'Dette markerer bookingen som bekræftet.'
+                        },
+                        handleForceConfirm
+                      )
+                    }
+                  >
+                    Mark confirmed
+                  </button>
+                </div>
+                <div className="grid two" style={{ marginTop: 12 }}>
+                  <button
+                    className="btn ghost"
+                    onClick={() =>
+                      confirmActionWithReason(
+                        {
+                          title: 'Refundér betaling',
+                          body: 'Angiv evt. en kort årsag til refunderingen (logges i audit).',
+                          reasonLabel: 'Årsag',
+                          reasonPlaceholder: 'Fx fejlbooking',
+                          confirmLabel: 'Refundér'
+                        },
+                        handleRefundPayment
+                      )
+                    }
+                  >
+                    {copy.console.refundAction}
+                  </button>
+                  <button className="btn ghost" onClick={handleReconcilePayment}>
+                    {copy.console.reconcileAction}
+                  </button>
                 </div>
                 <div className="section">
                   <button
@@ -708,7 +1384,22 @@ export function OwnerConsole() {
                   </button>
                   <div className="slot-grid">
                     {availabilitySlots.map((slot) => (
-                      <button key={`${slot.staffId}-${slot.startUtc}-res`} className="slot" onClick={() => handleReschedule(slot.startUtc, slot.staffId)}>
+                      <button
+                        key={`${slot.staffId}-${slot.startUtc}-res`}
+                        className="slot"
+                        onClick={() =>
+                          confirmAction(
+                            {
+                              title: 'Flyt booking',
+                              body: `Flyt bookingen til ${new Date(slot.startUtc).toLocaleTimeString('da-DK', {
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}?`
+                            },
+                            () => handleReschedule(slot.startUtc, slot.staffId)
+                          )
+                        }
+                      >
                         <strong>{new Date(slot.startUtc).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' })}</strong>
                         <span>{staffById.get(slot.staffId)?.name ?? 'Staff'}</span>
                       </button>
@@ -776,6 +1467,7 @@ export function OwnerConsole() {
                     <div>
                       <strong>{entry.name}</strong>
                       <p className="muted">{entry.role}</p>
+                      {entry.email && <p className="muted">{entry.email}</p>}
                     </div>
                     <div className="list-meta">
                       <select
@@ -795,10 +1487,86 @@ export function OwnerConsole() {
                         />
                         <span>Active</span>
                       </label>
+                      <button className="btn ghost" type="button" onClick={() => handleInviteStaff(entry)}>
+                        Invite login
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="panel subtle">
+              <h3>Staff arbejdstider</h3>
+              <label className="field">
+                <span className="label">Vælg medarbejder</span>
+                <select
+                  className="select"
+                  value={staffHoursTarget}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setStaffHoursTarget(value);
+                    if (value) {
+                      handleLoadStaffWorkingHours(value);
+                    }
+                  }}
+                >
+                  <option value="">Vælg medarbejder</option>
+                  {staff.map((entry) => (
+                    <option key={entry.id} value={entry.id}>{entry.name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="hours-grid">
+                {staffHoursWeekly.map((entry, index) => (
+                  <div key={`${entry.day}-${index}`} className="hours-row">
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={entry.enabled}
+                        onChange={(event) => {
+                          const next = [...staffHoursWeekly];
+                          next[index] = { ...entry, enabled: event.target.checked };
+                          setStaffHoursWeekly(next);
+                        }}
+                      />
+                      <span>{entry.day}</span>
+                    </label>
+                    <input
+                      className="input"
+                      type="time"
+                      value={entry.startTime}
+                      onChange={(event) => {
+                        const next = [...staffHoursWeekly];
+                        next[index] = { ...entry, startTime: event.target.value };
+                        setStaffHoursWeekly(next);
+                      }}
+                    />
+                    <input
+                      className="input"
+                      type="time"
+                      value={entry.endTime}
+                      onChange={(event) => {
+                        const next = [...staffHoursWeekly];
+                        next[index] = { ...entry, endTime: event.target.value };
+                        setStaffHoursWeekly(next);
+                      }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="btn-row">
+                <button className="btn primary" onClick={handleSaveStaffWorkingHours} disabled={!staffHoursTarget}>
+                  Gem arbejdstider
+                </button>
+                <button
+                  className="btn ghost"
+                  onClick={() => setStaffHoursWeekly(businessHours)}
+                  disabled={!staffHoursTarget}
+                >
+                  Brug salon timer
+                </button>
+              </div>
+              {staffHoursStatus && <div className="note">{staffHoursStatus}</div>}
             </div>
             <div className="panel subtle">
               <h3>Services</h3>
@@ -829,6 +1597,120 @@ export function OwnerConsole() {
                   </div>
                 ))}
               </div>
+            </div>
+            <div className="panel subtle">
+              <h3>Kunder</h3>
+              <div className="grid two">
+                <label className="field">
+                  <span className="label">Navn</span>
+                  <input
+                    className="input"
+                    value={customerForm.name}
+                    onChange={(event) => setCustomerForm((prev) => ({ ...prev, name: event.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span className="label">Email</span>
+                  <input
+                    className="input"
+                    value={customerForm.email}
+                    onChange={(event) => setCustomerForm((prev) => ({ ...prev, email: event.target.value }))}
+                  />
+                </label>
+                <label className="field">
+                  <span className="label">Telefon</span>
+                  <input
+                    className="input"
+                    value={customerForm.phone}
+                    onChange={(event) => setCustomerForm((prev) => ({ ...prev, phone: event.target.value }))}
+                  />
+                </label>
+              </div>
+              <label className="field" style={{ marginTop: 12 }}>
+                <span className="label">Noter</span>
+                <textarea
+                  className="textarea"
+                  rows={3}
+                  value={customerForm.notes}
+                  onChange={(event) => setCustomerForm((prev) => ({ ...prev, notes: event.target.value }))}
+                />
+              </label>
+              <div className="btn-row">
+                <button className="btn primary" onClick={handleCreateCustomer} disabled={customerBusy}>
+                  Opret kunde
+                </button>
+                <button className="btn ghost" onClick={resetCustomerForm} disabled={customerBusy}>
+                  Nulstil
+                </button>
+              </div>
+              {customerStatus && <div className="note">{customerStatus}</div>}
+              <div className="list">
+                {customers.map((customer) => (
+                  <div key={customer.id} className="list-card">
+                    <div>
+                      <strong>{customer.name}</strong>
+                      <p className="muted">
+                        {customer.email || '—'}{customer.phone ? ` · ${customer.phone}` : ''}
+                      </p>
+                      {customer.notes && <p className="muted">{customer.notes}</p>}
+                    </div>
+                    <div className="list-meta">
+                      <button className="btn ghost" type="button" onClick={() => handleSelectCustomer(customer)}>
+                        Redigér
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {customerEditId && (
+                <div className="panel" style={{ marginTop: 16 }}>
+                  <h4>Redigér kunde</h4>
+                  <div className="grid two">
+                    <label className="field">
+                      <span className="label">Navn</span>
+                      <input
+                        className="input"
+                        value={customerEdit.name}
+                        onChange={(event) => setCustomerEdit((prev) => ({ ...prev, name: event.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="label">Email</span>
+                      <input
+                        className="input"
+                        value={customerEdit.email}
+                        onChange={(event) => setCustomerEdit((prev) => ({ ...prev, email: event.target.value }))}
+                      />
+                    </label>
+                    <label className="field">
+                      <span className="label">Telefon</span>
+                      <input
+                        className="input"
+                        value={customerEdit.phone}
+                        onChange={(event) => setCustomerEdit((prev) => ({ ...prev, phone: event.target.value }))}
+                      />
+                    </label>
+                  </div>
+                  <label className="field" style={{ marginTop: 12 }}>
+                    <span className="label">Noter</span>
+                    <textarea
+                      className="textarea"
+                      rows={3}
+                      value={customerEdit.notes}
+                      onChange={(event) => setCustomerEdit((prev) => ({ ...prev, notes: event.target.value }))}
+                    />
+                  </label>
+                  <div className="btn-row">
+                    <button className="btn primary" onClick={handleUpdateCustomer} disabled={customerBusy}>
+                      Gem ændringer
+                    </button>
+                    <button className="btn ghost" onClick={() => setCustomerEditId('')} disabled={customerBusy}>
+                      Luk
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="panel subtle">
               <h3>Staff services</h3>
@@ -899,7 +1781,20 @@ export function OwnerConsole() {
                       <strong>{formatDateTime(entry.startTime)} → {formatDateTime(entry.endTime)}</strong>
                       <p className="muted">{entry.reason || 'override'}</p>
                     </div>
-                    <button className="btn ghost" onClick={() => handleDeleteTimeOff(entry.id)}>Remove</button>
+                    <button
+                      className="btn ghost"
+                      onClick={() =>
+                        confirmAction(
+                          {
+                            title: 'Fjern override',
+                            body: 'Er du sikker på, at du vil fjerne denne override?'
+                          },
+                          () => handleDeleteTimeOff(entry.id)
+                        )
+                      }
+                    >
+                      Remove
+                    </button>
                   </div>
                 ))}
               </div>
@@ -907,6 +1802,21 @@ export function OwnerConsole() {
           </div>
         </section>
       )}
+
+      <ConfirmDialog
+        open={Boolean(confirmState)}
+        title={confirmState?.title ?? ''}
+        body={confirmState?.body ?? ''}
+        confirmLabel={confirmState?.confirmLabel}
+        cancelLabel={confirmState?.cancelLabel}
+        showReason={confirmState?.showReason}
+        reasonLabel={confirmState?.reasonLabel}
+        reasonPlaceholder={confirmState?.reasonPlaceholder}
+        reasonRequired={confirmState?.reasonRequired}
+        onConfirm={() => confirmState?.onConfirm()}
+        onConfirmWithReason={confirmState?.onConfirmWithReason}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 }
