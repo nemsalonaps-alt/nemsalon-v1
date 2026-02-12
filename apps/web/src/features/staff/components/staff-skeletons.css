@@ -1,0 +1,67 @@
+.sc-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-border) 25%,
+    var(--surface-hovered) 50%,
+    var(--surface-border) 75%
+  );
+  background-size: 200% 100%;
+  animation: sc-skeleton-loading 1.5s ease-in-out infinite;
+}
+
+.sc-skeleton.rectangular {
+  border-radius: 8px;
+}
+
+.sc-skeleton.circular {
+  border-radius: 50%;
+}
+
+.sc-skeleton.text {
+  border-radius: 4px;
+}
+
+@keyframes sc-skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.sc-skeleton-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sc-skeleton-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.sc-skeleton-details {
+  margin-top: 16px;
+}
+
+.sc-skeleton-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface-border);
+}
+
+.sc-skeleton-detail-row:last-child {
+  border-bottom: none;
+}
+
+.sc-mb-sm {
+  margin-bottom: 8px;
+}
+
+.sc-mb-xs {
+  margin-bottom: 4px;
+}

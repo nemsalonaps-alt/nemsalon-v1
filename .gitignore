@@ -6,6 +6,9 @@ build
 .next
 .turbo
 coverage
+playwright-report
+test-results
+.playwright
 .DS_Store
 supabase/.temp
 supabase/.branches

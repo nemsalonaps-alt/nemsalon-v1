@@ -1,0 +1,388 @@
+.pc-root {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.pc-gate {
+  padding: 24px;
+}
+
+.pc-header-badge {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+
+.pc-muted {
+  color: var(--ink-muted);
+}
+
+.pc-status-card {
+  border-color: var(--primary);
+}
+
+.pc-status-text {
+  margin: 0;
+}
+
+.pc-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface-secondary);
+  border-radius: 12px;
+  overflow-x: auto;
+  margin-bottom: 24px;
+}
+
+.pc-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-secondary);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.pc-tab:hover {
+  background: var(--surface-raised);
+  color: var(--ink-primary);
+}
+
+.pc-tab-active {
+  background: var(--surface-primary);
+  color: var(--ink-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.pc-tab-icon {
+  font-size: 16px;
+}
+
+.pc-tab-label {
+  font-weight: 500;
+}
+
+.pc-tab-content {
+  min-height: 400px;
+}
+
+.pc-switcher-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.pc-switcher-icon {
+  font-size: 1.5rem;
+}
+
+.pc-switcher-desc {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+.pc-wrap {
+  flex-wrap: wrap;
+}
+
+.pc-filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.pc-select {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 0.875rem;
+  margin-top: 4px;
+}
+
+.pc-col {
+  flex: 1 1 200px;
+}
+
+.pc-action-button {
+  margin-top: 4px;
+}
+
+.pc-salon-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: all 0.15s ease;
+}
+
+.pc-salon-row:hover {
+  border-color: var(--primary);
+  background: var(--surface-secondary);
+}
+
+.pc-salon-row-active {
+  border-color: var(--primary);
+  background: var(--surface-raised);
+}
+
+.pc-salon-meta {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+.pc-details-row {
+  flex-wrap: wrap;
+}
+
+.pc-detail-label {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+.pc-payments-row {
+  flex-wrap: wrap;
+}
+
+.pc-payments-list {
+  margin-top: 16px;
+}
+
+.pc-payment-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+}
+
+.pc-audit-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+}
+
+/* Mission Control Styles */
+.mission-control {
+  padding: 0;
+}
+
+.mission-control-header {
+  margin-bottom: 24px;
+}
+
+.mission-control h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+}
+
+.mission-control-header p {
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+/* Health Strip */
+.health-strip {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: var(--surface-secondary);
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-raised);
+  border-radius: 8px;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.health-status {
+  font-size: 16px;
+}
+
+/* Business Metrics Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.metric-card {
+  padding: 20px;
+  background: var(--surface-raised);
+  border-radius: 12px;
+}
+
+.metric-card h3 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin: 0 0 8px 0;
+}
+
+.metric-value {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.metric-change {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.metric-change.positive {
+  color: var(--success);
+}
+
+.metric-change.negative {
+  color: var(--error);
+}
+
+/* Risk Radar */
+.risk-radar {
+  padding: 20px;
+  background: var(--surface-raised);
+  border-radius: 12px;
+}
+
+.risk-radar h3 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 16px 0;
+}
+
+.risk-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.risk-item:hover {
+  border-color: var(--primary);
+  background: var(--surface-secondary);
+}
+
+.risk-level {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.risk-level.low {
+  background: rgba(16, 185, 129, 0.1);
+  color: var(--success);
+}
+
+.risk-level.medium {
+  background: rgba(245, 158, 11, 0.1);
+  color: var(--warning);
+}
+
+.risk-level.high {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--error);
+}
+
+.risk-level.critical {
+  background: rgba(239, 68, 68, 0.2);
+  color: var(--error);
+  font-weight: 700;
+}
+
+/* Global Search */
+.global-search {
+  padding: 20px;
+}
+
+.search-results {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.search-result-item:hover {
+  background: var(--surface-secondary);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .pc-tabs {
+    padding: 4px;
+  }
+
+  .pc-tab {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .pc-tab-label {
+    display: none;
+  }
+
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .metric-value {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pc-root {
+    padding: 16px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}

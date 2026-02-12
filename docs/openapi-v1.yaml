@@ -23,6 +23,8 @@ tags:
   - name: Notifications
   - name: Devices
   - name: Webhooks
+  - name: Analytics
+  - name: Public
 
 paths:
   /health:
@@ -40,56 +42,6 @@ paths:
         '200':
           description: Ready
 
-  /v1/auth/login:
-    post:
-      tags: [Auth]
-      summary: Create a session
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Session created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '400': { $ref: '#/components/responses/ErrorResponse' }
-        '401': { $ref: '#/components/responses/ErrorResponse' }
-
-  /v1/auth/refresh:
-    post:
-      tags: [Auth]
-      summary: Refresh access token
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefreshRequest'
-      responses:
-        '200':
-          description: Token refreshed
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '400': { $ref: '#/components/responses/ErrorResponse' }
-        '401': { $ref: '#/components/responses/ErrorResponse' }
-
-  /v1/auth/logout:
-    post:
-      tags: [Auth]
-      summary: Revoke current session
-      security: [{ bearerAuth: [] }]
-      responses:
-        '204':
-          description: Logged out
-        '401': { $ref: '#/components/responses/ErrorResponse' }
-
   /v1/auth/me:
     get:
       tags: [Auth]
@@ -97,11 +49,239 @@ paths:
       security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: Current user
+          description: Current user with memberships
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/AuthMeResponse'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/salons/{slug}:
+    get:
+      tags: [Public]
+      summary: Get public salon
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Public salon summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicSalon'
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/salons/{slug}/services:
+    get:
+      tags: [Public]
+      summary: List public services
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Service list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceList'
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/salons/{slug}/staff:
+    get:
+      tags: [Public]
+      summary: List staff for public booking
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema: { type: string }
+        - name: serviceId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Staff list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicStaffList'
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/availability:
+    get:
+      tags: [Public]
+      summary: Get availability slots (public)
+      parameters:
+        - name: salonSlug
+          in: query
+          required: true
+          schema: { type: string }
+        - name: serviceId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: staffId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 30 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: intervalMinutes
+          in: query
+          required: false
+          schema: { type: integer, minimum: 5, maximum: 60 }
+      responses:
+        '200':
+          description: Availability slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/bookings:
+    post:
+      tags: [Public]
+      summary: Create public booking
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicBookingCreate'
+      responses:
+        '201':
+          description: Public booking created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicBookingCreateResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/bookings/{bookingId}:
+    get:
+      tags: [Public]
+      summary: Get public booking
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Booking summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/bookings/{bookingId}/checkout:
+    post:
+      tags: [Public]
+      summary: Create checkout for public booking
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicBookingCheckoutRequest'
+      responses:
+        '201':
+          description: Checkout created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingCheckoutResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/bookings/{bookingId}/cancel:
+    post:
+      tags: [Public]
+      summary: Cancel public booking
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicBookingCancelRequest'
+      responses:
+        '200':
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/public/bookings/{bookingId}/reschedule:
+    post:
+      tags: [Public]
+      summary: Reschedule public booking
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicBookingRescheduleRequest'
+      responses:
+        '200':
+          description: Booking rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '409': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/events:
+    post:
+      tags: [Analytics]
+      summary: Track a product event
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreate'
+      responses:
+        '201':
+          description: Event recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventAck'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
   /v1/salons/{salonId}:
@@ -142,14 +322,49 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /v1/salons/{salonId}/business-hours:
+    get:
+      tags: [Salons]
+      summary: Get salon business hours
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SalonId'
+      responses:
+        '200':
+          description: Business hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessHoursWeekly'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Salons]
+      summary: Replace salon business hours
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/SalonId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessHoursWeekly'
+      responses:
+        '200':
+          description: Updated business hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessHoursWeekly'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
   /v1/services:
     get:
       tags: [Services]
       summary: List services
       security: [{ bearerAuth: [] }]
-      parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Service list
@@ -221,9 +436,6 @@ paths:
       tags: [Staff]
       summary: List staff
       security: [{ bearerAuth: [] }]
-      parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
       responses:
         '200':
           description: Staff list
@@ -249,6 +461,203 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Staff'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/me:
+    get:
+      tags: [Staff]
+      summary: Get staff profile for current user
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Staff profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}:
+    patch:
+      tags: [Staff]
+      summary: Update staff
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffUpdate'
+      responses:
+        '200':
+          description: Updated staff
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Staff'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/invite:
+    post:
+      tags: [Staff]
+      summary: Invite staff login
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffInviteRequest'
+      responses:
+        '200':
+          description: Invite result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffInviteResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/working-hours:
+    get:
+      tags: [Staff]
+      summary: Get staff working hours
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      responses:
+        '200':
+          description: Working hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessHoursWeekly'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    put:
+      tags: [Staff]
+      summary: Replace staff working hours
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BusinessHoursWeekly'
+      responses:
+        '200':
+          description: Working hours updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BusinessHoursWeekly'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/time-off:
+    get:
+      tags: [Staff]
+      summary: List staff time off entries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      responses:
+        '200':
+          description: Time off list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffTimeOffList'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Staff]
+      summary: Create staff time off
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffTimeOffCreate'
+      responses:
+        '201':
+          description: Time off entry created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffTimeOff'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/time-off/{timeOffId}:
+    delete:
+      tags: [Staff]
+      summary: Delete staff time off entry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+        - name: timeOffId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Deleted
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/staff/{staffId}/services:
+    get:
+      tags: [Staff]
+      summary: List services assigned to staff
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      responses:
+        '200':
+          description: Staff services
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffServicesResponse'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+    post:
+      tags: [Staff]
+      summary: Assign services to staff
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/StaffId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffServicesAssignRequest'
+      responses:
+        '200':
+          description: Assigned services
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffServicesResponse'
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
@@ -326,14 +735,73 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /v1/availability/slots:
+    get:
+      tags: [Availability]
+      summary: List available booking slots
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: serviceId
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: from
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 30 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200 }
+        - name: staffId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+        - name: intervalMinutes
+          in: query
+          required: false
+          schema: { type: integer, minimum: 5, maximum: 60 }
+      responses:
+        '200':
+          description: Available slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AvailabilityResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /v1/bookings:
     get:
       tags: [Bookings]
       summary: List bookings
       security: [{ bearerAuth: [] }]
       parameters:
-        - $ref: '#/components/parameters/Page'
-        - $ref: '#/components/parameters/Limit'
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: staffId
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
       responses:
         '200':
           description: Booking list
@@ -346,6 +814,8 @@ paths:
       tags: [Bookings]
       summary: Create booking
       security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -400,6 +870,23 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /v1/bookings/{bookingId}/access-token:
+    post:
+      tags: [Bookings]
+      summary: Create booking access token
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '201':
+          description: Booking access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingAccessToken'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /v1/bookings/{bookingId}/checkout:
     post:
       tags: [Payments, Bookings]
@@ -407,6 +894,7 @@ paths:
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: '#/components/parameters/BookingId'
+        - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
         required: true
         content:
@@ -423,6 +911,54 @@ paths:
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
 
+  /v1/bookings/{bookingId}/cancel:
+    post:
+      tags: [Bookings]
+      summary: Cancel a booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelBookingRequest'
+      responses:
+        '200':
+          description: Cancelled booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/bookings/{bookingId}/reschedule:
+    post:
+      tags: [Bookings]
+      summary: Reschedule a booking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RescheduleBookingRequest'
+      responses:
+        '200':
+          description: Rescheduled booking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
   /v1/payments/{paymentId}:
     get:
       tags: [Payments]
@@ -438,6 +974,51 @@ paths:
               schema:
                 $ref: '#/components/schemas/Payment'
         '401': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/payments/{paymentId}/refund:
+    post:
+      tags: [Payments]
+      summary: Refund a payment
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundPaymentRequest'
+      responses:
+        '200':
+          description: Payment refunded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundPaymentResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
+        '404': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/payments/{paymentId}/reconcile:
+    post:
+      tags: [Payments]
+      summary: Reconcile a payment status with provider
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/PaymentId'
+      responses:
+        '200':
+          description: Payment reconciliation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconcilePaymentResponse'
+        '400': { $ref: '#/components/responses/ErrorResponse' }
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
         '404': { $ref: '#/components/responses/ErrorResponse' }
 
   /v1/webhooks/stripe:
@@ -477,6 +1058,34 @@ paths:
           description: Notification queued
         '400': { $ref: '#/components/responses/ErrorResponse' }
         '401': { $ref: '#/components/responses/ErrorResponse' }
+
+  /v1/notifications/outbox:
+    get:
+      tags: [Notifications]
+      summary: List notification outbox entries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum: [pending, processing, sent, failed]
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 50
+      responses:
+        '200':
+          description: Outbox entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboxListResponse'
+        '401': { $ref: '#/components/responses/ErrorResponse' }
+        '403': { $ref: '#/components/responses/ErrorResponse' }
 
   /v1/devices/register:
     post:
@@ -549,15 +1158,25 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema: { type: string, minLength: 8 }
+      description: Optional idempotency key to safely retry creates.
 
   schemas:
     Error:
       type: object
-      required: [code, message, traceId]
+      required: [code, message, errorKey, messageKey, traceId]
       properties:
         code:
           type: string
         message:
+          type: string
+        errorKey:
+          type: string
+        messageKey:
           type: string
         details:
           type: object
@@ -573,6 +1192,62 @@ components:
         email: { type: string, format: email }
         role: { type: string, enum: [owner, admin, staff] }
         salonId: { type: string, format: uuid }
+
+    AuthUser:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        phone: { type: string }
+        primarySalonId: { type: string, format: uuid }
+
+    AuthSalonSummary:
+      type: object
+      required: [id, name, locale, currency, timezone, cancellationWindowMinutes]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [draft, active] }
+        locale: { type: string }
+        salonType:
+          type: string
+          enum:
+            - hair_salon
+            - nail_salon
+            - wellness_center
+            - massage_clinic
+            - tattoo_studio
+            - barbershop
+            - spa_wellness
+            - cosmetic_clinic
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        timezone: { type: string }
+        cancellationWindowMinutes: { type: integer, minimum: 0 }
+
+    Membership:
+      type: object
+      required: [id, salonId, role, active]
+      properties:
+        id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
+        role: { type: string, enum: [owner, admin, staff] }
+        active: { type: boolean }
+        salon:
+          $ref: '#/components/schemas/AuthSalonSummary'
+
+    AuthMeResponse:
+      type: object
+      required: [user, memberships]
+      properties:
+        user: { $ref: '#/components/schemas/AuthUser' }
+        memberships:
+          type: array
+          items: { $ref: '#/components/schemas/Membership' }
+        primarySalonId: { type: string, format: uuid }
+        salon: { $ref: '#/components/schemas/AuthSalonSummary' }
 
     LoginRequest:
       type: object
@@ -597,15 +1272,57 @@ components:
         expiresIn: { type: integer }
         user: { $ref: '#/components/schemas/User' }
 
+    EventCreate:
+      type: object
+      required: [eventKey]
+      properties:
+        eventKey:
+          type: string
+          enum:
+            - auth.login_success
+            - onboarding.started
+            - onboarding.completed
+            - availability.viewed
+            - availability.public_viewed
+            - checkout.started
+            - checkout.public_started
+            - booking.confirmed
+            - booking.public_created
+            - booking.public_cancelled
+            - booking.public_rescheduled
+        metadata:
+          type: object
+          additionalProperties: true
+
+    EventAck:
+      type: object
+      required: [ok]
+      properties:
+        ok: { type: boolean }
+
     Salon:
       type: object
-      required: [id, name]
+      required: [id, name, timezone, locale, currency, cancellationWindowMinutes]
       properties:
         id: { type: string, format: uuid }
         name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [draft, active] }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         locale: { type: string }
+        salonType:
+          type: string
+          enum:
+            - hair_salon
+            - nail_salon
+            - wellness_center
+            - massage_clinic
+            - tattoo_studio
+            - barbershop
+            - spa_wellness
+            - cosmetic_clinic
         timezone: { type: string }
+        cancellationWindowMinutes: { type: integer, minimum: 0 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
 
@@ -613,29 +1330,84 @@ components:
       type: object
       properties:
         name: { type: string }
+        slug: { type: string }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         locale: { type: string }
+        salonType:
+          type: string
+          enum:
+            - hair_salon
+            - nail_salon
+            - wellness_center
+            - massage_clinic
+            - tattoo_studio
+            - barbershop
+            - spa_wellness
+            - cosmetic_clinic
         timezone: { type: string }
+        cancellationWindowMinutes: { type: integer, minimum: 0 }
+
+    BusinessHoursDay:
+      type: object
+      required: [day, startTime, endTime, enabled]
+      properties:
+        day: { type: string, enum: [mon, tue, wed, thu, fri, sat, sun] }
+        startTime: { type: string, example: '09:00' }
+        endTime: { type: string, example: '17:00' }
+        enabled: { type: boolean }
+
+    BusinessHoursWeekly:
+      type: object
+      required: [weekly]
+      properties:
+        weekly:
+          type: array
+          items: { $ref: '#/components/schemas/BusinessHoursDay' }
+
+    SalonCreate:
+      type: object
+      required: [name, timezone, locale, currency]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        locale: { type: string }
+        salonType:
+          type: string
+          enum:
+            - hair_salon
+            - nail_salon
+            - wellness_center
+            - massage_clinic
+            - tattoo_studio
+            - barbershop
+            - spa_wellness
+            - cosmetic_clinic
+        timezone: { type: string }
+        cancellationWindowMinutes: { type: integer, minimum: 0 }
 
     Service:
       type: object
-      required: [id, name, price, durationMinutes]
+      required: [id, salonId, name, price, durationMinutes, currency]
       properties:
         id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
         name: { type: string }
         price: { type: integer, description: 'Minor units (e.g., øre)' }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         durationMinutes: { type: integer }
+        bufferMinutes: { type: integer }
         active: { type: boolean }
 
     ServiceCreate:
       type: object
-      required: [name, price, durationMinutes]
+      required: [name, price, durationMinutes, currency]
       properties:
         name: { type: string }
         price: { type: integer, description: 'Minor units (e.g., øre)' }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         durationMinutes: { type: integer }
+        bufferMinutes: { type: integer }
         active: { type: boolean }
 
     ServiceUpdate:
@@ -645,6 +1417,7 @@ components:
         price: { type: integer, description: 'Minor units (e.g., øre)' }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         durationMinutes: { type: integer }
+        bufferMinutes: { type: integer }
         active: { type: boolean }
 
     ServiceList:
@@ -657,12 +1430,16 @@ components:
 
     Staff:
       type: object
-      required: [id, name, role]
+      required: [id, salonId, name, role]
       properties:
         id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
         name: { type: string }
         role: { type: string, enum: [owner, admin, staff] }
         active: { type: boolean }
+        userId: { type: string, format: uuid, nullable: true }
+        email: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
 
     StaffCreate:
       type: object
@@ -672,6 +1449,49 @@ components:
         role: { type: string, enum: [owner, admin, staff] }
         active: { type: boolean }
 
+    StaffUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, staff] }
+        active: { type: boolean }
+        email: { type: string }
+        phone: { type: string }
+
+    StaffInviteRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string, enum: [staff, admin] }
+
+    StaffInviteResponse:
+      type: object
+      required: [staff, userId, email, status]
+      properties:
+        staff: { $ref: '#/components/schemas/Staff' }
+        userId: { type: string, format: uuid }
+        email: { type: string, format: email }
+        status: { type: string, enum: [invited, existing] }
+        actionLink: { type: string, nullable: true }
+
+    StaffServicesAssignRequest:
+      type: object
+      required: [serviceIds]
+      properties:
+        serviceIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    StaffServicesResponse:
+      type: object
+      required: [staffId, serviceIds]
+      properties:
+        staffId: { type: string, format: uuid }
+        serviceIds:
+          type: array
+          items: { type: string, format: uuid }
+
     StaffList:
       type: object
       required: [data]
@@ -679,6 +1499,33 @@ components:
         data:
           type: array
           items: { $ref: '#/components/schemas/Staff' }
+
+    StaffTimeOff:
+      type: object
+      required: [id, salonId, staffId, startTime, endTime]
+      properties:
+        id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        reason: { type: string }
+
+    StaffTimeOffCreate:
+      type: object
+      required: [startUtc, endUtc]
+      properties:
+        startUtc: { type: string, format: date-time }
+        endUtc: { type: string, format: date-time }
+        reason: { type: string }
+
+    StaffTimeOffList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/StaffTimeOff' }
 
     Customer:
       type: object
@@ -715,6 +1562,35 @@ components:
           type: array
           items: { $ref: '#/components/schemas/Customer' }
 
+    AvailabilitySlot:
+      type: object
+      required: [startUtc, endUtc, staffId]
+      properties:
+        startUtc: { type: string, format: date-time }
+        endUtc: { type: string, format: date-time }
+        staffId: { type: string, format: uuid }
+
+    AvailabilityMeta:
+      type: object
+      required: [fromUtc, days, intervalMinutes, serviceId, timezone]
+      properties:
+        fromUtc: { type: string, format: date-time }
+        days: { type: integer }
+        intervalMinutes: { type: integer }
+        serviceId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        timezone: { type: string }
+
+    AvailabilityResponse:
+      type: object
+      required: [slots, meta]
+      properties:
+        slots:
+          type: array
+          items: { $ref: '#/components/schemas/AvailabilitySlot' }
+        meta:
+          $ref: '#/components/schemas/AvailabilityMeta'
+
     Booking:
       type: object
       required: [id, salonId, customerId, staffId, serviceId, startTime, endTime, status, totalAmount, currency]
@@ -724,36 +1600,79 @@ components:
         customerId: { type: string, format: uuid }
         staffId: { type: string, format: uuid }
         serviceId: { type: string, format: uuid }
-        startTime: { type: string, format: date-time }
-        endTime: { type: string, format: date-time }
+        startTime: { type: string, format: date-time, description: 'UTC ISO timestamp' }
+        endTime: { type: string, format: date-time, description: 'UTC ISO timestamp' }
         status:
           type: string
           enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
         totalAmount: { type: integer, description: 'Minor units (e.g., øre)' }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
         notes: { type: string }
+        customerName: { type: string }
+        customerEmail: { type: string }
+        customerPhone: { type: string }
+        staffName: { type: string }
+        serviceName: { type: string }
+        paymentStatus:
+          type: string
+          enum: [created, requires_action, processing, succeeded, failed, refunded, canceled, pending, paid]
+        paymentId: { type: string, format: uuid }
 
     BookingCreate:
       type: object
-      required: [salonId, staffId, serviceId, startTime, endTime]
+      required: [staffId, serviceId, startUtc]
       properties:
-        salonId: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
         customer: { $ref: '#/components/schemas/CustomerCreate' }
         staffId: { type: string, format: uuid }
         serviceId: { type: string, format: uuid }
-        startTime: { type: string, format: date-time }
-        endTime: { type: string, format: date-time }
+        startUtc:
+          type: string
+          format: date-time
+          description: 'UTC ISO timestamp, must align to 15-minute grid.'
+        endUtc:
+          type: string
+          format: date-time
+          description: Optional; server computes endTime based on service duration.
+        startTime:
+          type: string
+          format: date-time
+          description: Deprecated alias for startUtc.
+        endTime:
+          type: string
+          format: date-time
+          description: Deprecated alias for endUtc.
         notes: { type: string }
       oneOf:
         - required: [customerId]
         - required: [customer]
 
+    BookingResponse:
+      type: object
+      required: [booking]
+      properties:
+        booking:
+          $ref: '#/components/schemas/Booking'
+
+    CancelBookingRequest:
+      type: object
+      properties:
+        reasonKey: { type: string }
+        note: { type: string }
+
+    RescheduleBookingRequest:
+      type: object
+      required: [staffId, startUtc]
+      properties:
+        staffId: { type: string, format: uuid }
+        startUtc:
+          type: string
+          format: date-time
+          description: 'UTC ISO timestamp, must align to 15-minute grid.'
+
     BookingUpdate:
       type: object
       properties:
-        startTime: { type: string, format: date-time }
-        endTime: { type: string, format: date-time }
         status:
           type: string
           enum: [pending, confirmed, in_progress, completed, cancelled, no_show]
@@ -771,9 +1690,12 @@ components:
       type: object
       required: [successUrl, cancelUrl]
       properties:
-        provider: { type: string, enum: [stripe, mobilepay] }
         successUrl: { type: string, format: uri }
         cancelUrl: { type: string, format: uri }
+        idempotencyKey:
+          type: string
+          minLength: 8
+          description: Optional idempotency key for checkout creation.
 
     BookingCheckoutResponse:
       type: object
@@ -781,19 +1703,136 @@ components:
       properties:
         checkoutUrl: { type: string, format: uri }
         paymentId: { type: string, format: uuid }
-        provider: { type: string, enum: [stripe, mobilepay] }
+        provider: { type: string, enum: [stripe] }
+
+    BookingAccessToken:
+      type: object
+      required: [bookingToken]
+      properties:
+        bookingToken: { type: string }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    PublicSalon:
+      type: object
+      required: [id, name, slug, locale, currency, timezone, cancellationWindowMinutes]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        status: { type: string, enum: [draft, active] }
+        locale: { type: string }
+        currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
+        timezone: { type: string }
+        cancellationWindowMinutes: { type: integer, minimum: 0 }
+
+    PublicStaff:
+      type: object
+      required: [id, name, role, active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        role: { type: string, enum: [owner, admin, staff] }
+        active: { type: boolean }
+
+    PublicStaffList:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/PublicStaff' }
+
+    PublicBookingCreate:
+      type: object
+      required: [salonSlug, serviceId, startUtc, customer]
+      properties:
+        salonSlug: { type: string }
+        serviceId: { type: string, format: uuid }
+        staffId: { type: string, format: uuid }
+        startUtc: { type: string, format: date-time }
+        notes: { type: string }
+        idempotencyKey: { type: string, minLength: 8 }
+        customer:
+          type: object
+          required: [name]
+          properties:
+            name: { type: string }
+            email: { type: string, format: email }
+            phone: { type: string }
+
+    PublicBookingCreateResponse:
+      type: object
+      required: [booking, bookingToken]
+      properties:
+        booking: { $ref: '#/components/schemas/Booking' }
+        bookingToken: { type: string }
+        expiresAt: { type: string, format: date-time, nullable: true }
+
+    PublicBookingCheckoutRequest:
+      type: object
+      required: [token, successUrl, cancelUrl]
+      properties:
+        token: { type: string }
+        successUrl: { type: string, format: uri }
+        cancelUrl: { type: string, format: uri }
+
+    PublicBookingCancelRequest:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+        reasonKey: { type: string }
+        note: { type: string }
+
+    PublicBookingRescheduleRequest:
+      type: object
+      required: [token, startUtc]
+      properties:
+        token: { type: string }
+        staffId: { type: string, format: uuid }
+        startUtc: { type: string, format: date-time }
 
     Payment:
       type: object
-      required: [id, bookingId, status, amount, currency, provider]
+      required: [id, bookingId, status, amount, currency, provider, salonId]
       properties:
         id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
         bookingId: { type: string, format: uuid }
-        status: { type: string, enum: [pending, paid, failed, refunded] }
+        status:
+          type: string
+          enum: [created, requires_action, processing, succeeded, failed, refunded, canceled, pending, paid]
         amount: { type: integer, description: 'Minor units (e.g., øre)' }
         currency: { type: string, minLength: 3, maxLength: 3, pattern: '^[A-Z]{3}$' }
-        provider: { type: string, enum: [stripe, mobilepay] }
+        provider: { type: string, enum: [stripe] }
         providerReference: { type: string }
+        providerIntentId: { type: string }
+        providerEventId: { type: string }
+        idempotencyKey: { type: string }
+
+    RefundPaymentRequest:
+      type: object
+      properties:
+        idempotencyKey: { type: string, minLength: 8 }
+        reason: { type: string }
+
+    RefundPaymentResponse:
+      type: object
+      required: [payment, idempotent]
+      properties:
+        payment:
+          $ref: '#/components/schemas/Payment'
+        idempotent: { type: boolean }
+
+    ReconcilePaymentResponse:
+      type: object
+      required: [payment, action]
+      properties:
+        payment:
+          $ref: '#/components/schemas/Payment'
+        action:
+          type: string
+          enum: [noop, updated]
 
     StripeWebhookEvent:
       type: object
@@ -816,6 +1855,34 @@ components:
         to: { type: string }
         template: { type: string }
         data: { type: object, additionalProperties: true }
+
+    OutboxEntry:
+      type: object
+      required: [id, salonId, type, channel, provider, recipient, payload, status, attempts]
+      properties:
+        id: { type: string, format: uuid }
+        salonId: { type: string, format: uuid }
+        bookingId: { type: string, format: uuid, nullable: true }
+        type: { type: string }
+        channel: { type: string, enum: [email, sms, push] }
+        provider: { type: string }
+        recipient: { type: string }
+        payload: { type: object, additionalProperties: true }
+        status: { type: string, enum: [pending, processing, sent, failed] }
+        dedupeKey: { type: string, nullable: true }
+        attempts: { type: integer }
+        nextAttemptAt: { type: string, format: date-time, nullable: true }
+        lockedAt: { type: string, format: date-time, nullable: true }
+        lockedBy: { type: string, nullable: true }
+
+    OutboxListResponse:
+      type: object
+      required: [entries]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboxEntry'
 
     DeviceRegisterRequest:
       type: object

@@ -27,68 +27,240 @@ export interface paths {
       };
     };
   };
-  "/v1/auth/login": {
-    /** Create a session */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["LoginRequest"];
-        };
-      };
-      responses: {
-        /** @description Session created */
-        200: {
-          content: {
-            "application/json": components["schemas"]["LoginResponse"];
-          };
-        };
-        400: components["responses"]["ErrorResponse"];
-        401: components["responses"]["ErrorResponse"];
-      };
-    };
-  };
-  "/v1/auth/refresh": {
-    /** Refresh access token */
-    post: {
-      requestBody: {
-        content: {
-          "application/json": components["schemas"]["RefreshRequest"];
-        };
-      };
-      responses: {
-        /** @description Token refreshed */
-        200: {
-          content: {
-            "application/json": components["schemas"]["LoginResponse"];
-          };
-        };
-        400: components["responses"]["ErrorResponse"];
-        401: components["responses"]["ErrorResponse"];
-      };
-    };
-  };
-  "/v1/auth/logout": {
-    /** Revoke current session */
-    post: {
-      responses: {
-        /** @description Logged out */
-        204: {
-          content: never;
-        };
-        401: components["responses"]["ErrorResponse"];
-      };
-    };
-  };
   "/v1/auth/me": {
     /** Get current user */
     get: {
       responses: {
-        /** @description Current user */
+        /** @description Current user with memberships */
         200: {
           content: {
-            "application/json": components["schemas"]["User"];
+            "application/json": components["schemas"]["AuthMeResponse"];
           };
         };
+        401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/salons/{slug}": {
+    /** Get public salon */
+    get: {
+      parameters: {
+        path: {
+          slug: string;
+        };
+      };
+      responses: {
+        /** @description Public salon summary */
+        200: {
+          content: {
+            "application/json": components["schemas"]["PublicSalon"];
+          };
+        };
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/salons/{slug}/services": {
+    /** List public services */
+    get: {
+      parameters: {
+        path: {
+          slug: string;
+        };
+      };
+      responses: {
+        /** @description Service list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["ServiceList"];
+          };
+        };
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/salons/{slug}/staff": {
+    /** List staff for public booking */
+    get: {
+      parameters: {
+        query?: {
+          serviceId?: string;
+        };
+        path: {
+          slug: string;
+        };
+      };
+      responses: {
+        /** @description Staff list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["PublicStaffList"];
+          };
+        };
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/availability": {
+    /** Get availability slots (public) */
+    get: {
+      parameters: {
+        query: {
+          salonSlug: string;
+          serviceId: string;
+          staffId?: string;
+          from?: string;
+          days?: number;
+          limit?: number;
+          intervalMinutes?: number;
+        };
+      };
+      responses: {
+        /** @description Availability slots */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AvailabilityResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/bookings": {
+    /** Create public booking */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["PublicBookingCreate"];
+        };
+      };
+      responses: {
+        /** @description Public booking created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["PublicBookingCreateResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        409: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/bookings/{bookingId}": {
+    /** Get public booking */
+    get: {
+      parameters: {
+        query: {
+          token: string;
+        };
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      responses: {
+        /** @description Booking summary */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Booking"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/bookings/{bookingId}/checkout": {
+    /** Create checkout for public booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["PublicBookingCheckoutRequest"];
+        };
+      };
+      responses: {
+        /** @description Checkout created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["BookingCheckoutResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        409: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/bookings/{bookingId}/cancel": {
+    /** Cancel public booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["PublicBookingCancelRequest"];
+        };
+      };
+      responses: {
+        /** @description Booking cancelled */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Booking"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        409: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/public/bookings/{bookingId}/reschedule": {
+    /** Reschedule public booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["PublicBookingRescheduleRequest"];
+        };
+      };
+      responses: {
+        /** @description Booking rescheduled */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Booking"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        409: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/events": {
+    /** Track a product event */
+    post: {
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["EventCreate"];
+        };
+      };
+      responses: {
+        /** @description Event recorded */
+        201: {
+          content: {
+            "application/json": components["schemas"]["EventAck"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
         401: components["responses"]["ErrorResponse"];
       };
     };
@@ -136,15 +308,52 @@ export interface paths {
       };
     };
   };
+  "/v1/salons/{salonId}/business-hours": {
+    /** Get salon business hours */
+    get: {
+      parameters: {
+        path: {
+          salonId: components["parameters"]["SalonId"];
+        };
+      };
+      responses: {
+        /** @description Business hours */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BusinessHoursWeekly"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Replace salon business hours */
+    put: {
+      parameters: {
+        path: {
+          salonId: components["parameters"]["SalonId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["BusinessHoursWeekly"];
+        };
+      };
+      responses: {
+        /** @description Updated business hours */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BusinessHoursWeekly"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/services": {
     /** List services */
     get: {
-      parameters: {
-        query?: {
-          page?: components["parameters"]["Page"];
-          limit?: components["parameters"]["Limit"];
-        };
-      };
       responses: {
         /** @description Service list */
         200: {
@@ -220,12 +429,6 @@ export interface paths {
   "/v1/staff": {
     /** List staff */
     get: {
-      parameters: {
-        query?: {
-          page?: components["parameters"]["Page"];
-          limit?: components["parameters"]["Limit"];
-        };
-      };
       responses: {
         /** @description Staff list */
         200: {
@@ -248,6 +451,222 @@ export interface paths {
         201: {
           content: {
             "application/json": components["schemas"]["Staff"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/me": {
+    /** Get staff profile for current user */
+    get: {
+      responses: {
+        /** @description Staff profile */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Staff"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}": {
+    /** Update staff */
+    patch: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffUpdate"];
+        };
+      };
+      responses: {
+        /** @description Updated staff */
+        200: {
+          content: {
+            "application/json": components["schemas"]["Staff"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/invite": {
+    /** Invite staff login */
+    post: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffInviteRequest"];
+        };
+      };
+      responses: {
+        /** @description Invite result */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffInviteResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/working-hours": {
+    /** Get staff working hours */
+    get: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      responses: {
+        /** @description Working hours */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BusinessHoursWeekly"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Replace staff working hours */
+    put: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["BusinessHoursWeekly"];
+        };
+      };
+      responses: {
+        /** @description Working hours updated */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BusinessHoursWeekly"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/time-off": {
+    /** List staff time off entries */
+    get: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      responses: {
+        /** @description Time off list */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffTimeOffList"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Create staff time off */
+    post: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffTimeOffCreate"];
+        };
+      };
+      responses: {
+        /** @description Time off entry created */
+        201: {
+          content: {
+            "application/json": components["schemas"]["StaffTimeOff"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/time-off/{timeOffId}": {
+    /** Delete staff time off entry */
+    delete: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+          timeOffId: string;
+        };
+      };
+      responses: {
+        /** @description Deleted */
+        204: {
+          content: never;
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/staff/{staffId}/services": {
+    /** List services assigned to staff */
+    get: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      responses: {
+        /** @description Staff services */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffServicesResponse"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+    /** Assign services to staff */
+    post: {
+      parameters: {
+        path: {
+          staffId: components["parameters"]["StaffId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["StaffServicesAssignRequest"];
+        };
+      };
+      responses: {
+        /** @description Assigned services */
+        200: {
+          content: {
+            "application/json": components["schemas"]["StaffServicesResponse"];
           };
         };
         400: components["responses"]["ErrorResponse"];
@@ -336,13 +755,41 @@ export interface paths {
       };
     };
   };
+  "/v1/availability/slots": {
+    /** List available booking slots */
+    get: {
+      parameters: {
+        query: {
+          serviceId: string;
+          from?: string;
+          days?: number;
+          limit?: number;
+          staffId?: string;
+          intervalMinutes?: number;
+        };
+      };
+      responses: {
+        /** @description Available slots */
+        200: {
+          content: {
+            "application/json": components["schemas"]["AvailabilityResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/bookings": {
     /** List bookings */
     get: {
       parameters: {
         query?: {
-          page?: components["parameters"]["Page"];
-          limit?: components["parameters"]["Limit"];
+          from?: string;
+          to?: string;
+          staffId?: string;
+          status?: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
         };
       };
       responses: {
@@ -357,6 +804,11 @@ export interface paths {
     };
     /** Create booking */
     post: {
+      parameters: {
+        header?: {
+          "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+        };
+      };
       requestBody: {
         content: {
           "application/json": components["schemas"]["BookingCreate"];
@@ -417,10 +869,33 @@ export interface paths {
       };
     };
   };
+  "/v1/bookings/{bookingId}/access-token": {
+    /** Create booking access token */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      responses: {
+        /** @description Booking access token */
+        201: {
+          content: {
+            "application/json": components["schemas"]["BookingAccessToken"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/bookings/{bookingId}/checkout": {
     /** Create online checkout session for booking */
     post: {
       parameters: {
+        header?: {
+          "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+        };
         path: {
           bookingId: components["parameters"]["BookingId"];
         };
@@ -442,6 +917,58 @@ export interface paths {
       };
     };
   };
+  "/v1/bookings/{bookingId}/cancel": {
+    /** Cancel a booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody?: {
+        content: {
+          "application/json": components["schemas"]["CancelBookingRequest"];
+        };
+      };
+      responses: {
+        /** @description Cancelled booking */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BookingResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/bookings/{bookingId}/reschedule": {
+    /** Reschedule a booking */
+    post: {
+      parameters: {
+        path: {
+          bookingId: components["parameters"]["BookingId"];
+        };
+      };
+      requestBody: {
+        content: {
+          "application/json": components["schemas"]["RescheduleBookingRequest"];
+        };
+      };
+      responses: {
+        /** @description Rescheduled booking */
+        200: {
+          content: {
+            "application/json": components["schemas"]["BookingResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/payments/{paymentId}": {
     /** Get payment */
     get: {
@@ -458,6 +985,58 @@ export interface paths {
           };
         };
         401: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/payments/{paymentId}/refund": {
+    /** Refund a payment */
+    post: {
+      parameters: {
+        header?: {
+          "Idempotency-Key"?: components["parameters"]["IdempotencyKey"];
+        };
+        path: {
+          paymentId: components["parameters"]["PaymentId"];
+        };
+      };
+      requestBody?: {
+        content: {
+          "application/json": components["schemas"]["RefundPaymentRequest"];
+        };
+      };
+      responses: {
+        /** @description Payment refunded */
+        200: {
+          content: {
+            "application/json": components["schemas"]["RefundPaymentResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        403: components["responses"]["ErrorResponse"];
+        404: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
+  "/v1/payments/{paymentId}/reconcile": {
+    /** Reconcile a payment status with provider */
+    post: {
+      parameters: {
+        path: {
+          paymentId: components["parameters"]["PaymentId"];
+        };
+      };
+      responses: {
+        /** @description Payment reconciliation result */
+        200: {
+          content: {
+            "application/json": components["schemas"]["ReconcilePaymentResponse"];
+          };
+        };
+        400: components["responses"]["ErrorResponse"];
+        401: components["responses"]["ErrorResponse"];
+        403: components["responses"]["ErrorResponse"];
         404: components["responses"]["ErrorResponse"];
       };
     };
@@ -502,6 +1081,27 @@ export interface paths {
       };
     };
   };
+  "/v1/notifications/outbox": {
+    /** List notification outbox entries */
+    get: {
+      parameters: {
+        query?: {
+          status?: "pending" | "processing" | "sent" | "failed";
+          limit?: number;
+        };
+      };
+      responses: {
+        /** @description Outbox entries */
+        200: {
+          content: {
+            "application/json": components["schemas"]["OutboxListResponse"];
+          };
+        };
+        401: components["responses"]["ErrorResponse"];
+        403: components["responses"]["ErrorResponse"];
+      };
+    };
+  };
   "/v1/devices/register": {
     /** Register device for push notifications */
     post: {
@@ -529,6 +1129,8 @@ export interface components {
     Error: {
       code: string;
       message: string;
+      errorKey: string;
+      messageKey: string;
       details?: {
         [key: string]: unknown;
       };
@@ -543,6 +1145,47 @@ export interface components {
       role: "owner" | "admin" | "staff";
       /** Format: uuid */
       salonId?: string;
+    };
+    AuthUser: {
+      /** Format: uuid */
+      id: string;
+      /** Format: email */
+      email?: string;
+      fullName?: string;
+      phone?: string;
+      /** Format: uuid */
+      primarySalonId?: string;
+    };
+    AuthSalonSummary: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      slug?: string;
+      /** @enum {string} */
+      status?: "draft" | "active";
+      locale: string;
+      /** @enum {string} */
+      salonType?: "hair_salon" | "nail_salon" | "wellness_center" | "massage_clinic" | "tattoo_studio" | "barbershop" | "spa_wellness" | "cosmetic_clinic";
+      currency: string;
+      timezone: string;
+      cancellationWindowMinutes: number;
+    };
+    Membership: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      salonId: string;
+      /** @enum {string} */
+      role: "owner" | "admin" | "staff";
+      active: boolean;
+      salon?: components["schemas"]["AuthSalonSummary"];
+    };
+    AuthMeResponse: {
+      user: components["schemas"]["AuthUser"];
+      memberships: components["schemas"]["Membership"][];
+      /** Format: uuid */
+      primarySalonId?: string;
+      salon?: components["schemas"]["AuthSalonSummary"];
     };
     LoginRequest: {
       /** Format: email */
@@ -560,13 +1203,29 @@ export interface components {
       expiresIn: number;
       user: components["schemas"]["User"];
     };
+    EventCreate: {
+      /** @enum {string} */
+      eventKey: "auth.login_success" | "onboarding.started" | "onboarding.completed" | "availability.viewed" | "availability.public_viewed" | "checkout.started" | "checkout.public_started" | "booking.confirmed" | "booking.public_created" | "booking.public_cancelled" | "booking.public_rescheduled";
+      metadata?: {
+        [key: string]: unknown;
+      };
+    };
+    EventAck: {
+      ok: boolean;
+    };
     Salon: {
       /** Format: uuid */
       id: string;
       name: string;
-      currency?: string;
-      locale?: string;
-      timezone?: string;
+      slug?: string;
+      /** @enum {string} */
+      status?: "draft" | "active";
+      currency: string;
+      locale: string;
+      /** @enum {string} */
+      salonType?: "hair_salon" | "nail_salon" | "wellness_center" | "massage_clinic" | "tattoo_studio" | "barbershop" | "spa_wellness" | "cosmetic_clinic";
+      timezone: string;
+      cancellationWindowMinutes: number;
       /** Format: date-time */
       created_at?: string;
       /** Format: date-time */
@@ -574,26 +1233,56 @@ export interface components {
     };
     SalonUpdate: {
       name?: string;
+      slug?: string;
       currency?: string;
       locale?: string;
+      /** @enum {string} */
+      salonType?: "hair_salon" | "nail_salon" | "wellness_center" | "massage_clinic" | "tattoo_studio" | "barbershop" | "spa_wellness" | "cosmetic_clinic";
       timezone?: string;
+      cancellationWindowMinutes?: number;
+    };
+    BusinessHoursDay: {
+      /** @enum {string} */
+      day: "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+      /** @example 09:00 */
+      startTime: string;
+      /** @example 17:00 */
+      endTime: string;
+      enabled: boolean;
+    };
+    BusinessHoursWeekly: {
+      weekly: components["schemas"]["BusinessHoursDay"][];
+    };
+    SalonCreate: {
+      name: string;
+      slug?: string;
+      currency: string;
+      locale: string;
+      /** @enum {string} */
+      salonType?: "hair_salon" | "nail_salon" | "wellness_center" | "massage_clinic" | "tattoo_studio" | "barbershop" | "spa_wellness" | "cosmetic_clinic";
+      timezone: string;
+      cancellationWindowMinutes?: number;
     };
     Service: {
       /** Format: uuid */
       id: string;
+      /** Format: uuid */
+      salonId: string;
       name: string;
       /** @description Minor units (e.g., øre) */
       price: number;
-      currency?: string;
+      currency: string;
       durationMinutes: number;
+      bufferMinutes?: number;
       active?: boolean;
     };
     ServiceCreate: {
       name: string;
       /** @description Minor units (e.g., øre) */
       price: number;
-      currency?: string;
+      currency: string;
       durationMinutes: number;
+      bufferMinutes?: number;
       active?: boolean;
     };
     ServiceUpdate: {
@@ -602,6 +1291,7 @@ export interface components {
       price?: number;
       currency?: string;
       durationMinutes?: number;
+      bufferMinutes?: number;
       active?: boolean;
     };
     ServiceList: {
@@ -610,10 +1300,16 @@ export interface components {
     Staff: {
       /** Format: uuid */
       id: string;
+      /** Format: uuid */
+      salonId: string;
       name: string;
       /** @enum {string} */
       role: "owner" | "admin" | "staff";
       active?: boolean;
+      /** Format: uuid */
+      userId?: string | null;
+      email?: string | null;
+      phone?: string | null;
     };
     StaffCreate: {
       name: string;
@@ -621,8 +1317,63 @@ export interface components {
       role: "owner" | "admin" | "staff";
       active?: boolean;
     };
+    StaffUpdate: {
+      name?: string;
+      /** @enum {string} */
+      role?: "owner" | "admin" | "staff";
+      active?: boolean;
+      email?: string;
+      phone?: string;
+    };
+    StaffInviteRequest: {
+      /** Format: email */
+      email: string;
+      /** @enum {string} */
+      role?: "staff" | "admin";
+    };
+    StaffInviteResponse: {
+      staff: components["schemas"]["Staff"];
+      /** Format: uuid */
+      userId: string;
+      /** Format: email */
+      email: string;
+      /** @enum {string} */
+      status: "invited" | "existing";
+      actionLink?: string | null;
+    };
+    StaffServicesAssignRequest: {
+      serviceIds: string[];
+    };
+    StaffServicesResponse: {
+      /** Format: uuid */
+      staffId: string;
+      serviceIds: string[];
+    };
     StaffList: {
       data: components["schemas"]["Staff"][];
+    };
+    StaffTimeOff: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      salonId: string;
+      /** Format: uuid */
+      staffId: string;
+      /** Format: date-time */
+      startTime: string;
+      /** Format: date-time */
+      endTime: string;
+      reason?: string;
+    };
+    StaffTimeOffCreate: {
+      /** Format: date-time */
+      startUtc: string;
+      /** Format: date-time */
+      endUtc: string;
+      reason?: string;
+    };
+    StaffTimeOffList: {
+      data: components["schemas"]["StaffTimeOff"][];
     };
     Customer: {
       /** Format: uuid */
@@ -650,6 +1401,29 @@ export interface components {
     CustomerList: {
       data: components["schemas"]["Customer"][];
     };
+    AvailabilitySlot: {
+      /** Format: date-time */
+      startUtc: string;
+      /** Format: date-time */
+      endUtc: string;
+      /** Format: uuid */
+      staffId: string;
+    };
+    AvailabilityMeta: {
+      /** Format: date-time */
+      fromUtc: string;
+      days: number;
+      intervalMinutes: number;
+      /** Format: uuid */
+      serviceId: string;
+      /** Format: uuid */
+      staffId?: string;
+      timezone: string;
+    };
+    AvailabilityResponse: {
+      slots: components["schemas"]["AvailabilitySlot"][];
+      meta: components["schemas"]["AvailabilityMeta"];
+    };
     Booking: {
       /** Format: uuid */
       id: string;
@@ -661,9 +1435,15 @@ export interface components {
       staffId: string;
       /** Format: uuid */
       serviceId: string;
-      /** Format: date-time */
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp
+       */
       startTime: string;
-      /** Format: date-time */
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp
+       */
       endTime: string;
       /** @enum {string} */
       status: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
@@ -671,10 +1451,17 @@ export interface components {
       totalAmount: number;
       currency: string;
       notes?: string;
+      customerName?: string;
+      customerEmail?: string;
+      customerPhone?: string;
+      staffName?: string;
+      serviceName?: string;
+      /** @enum {string} */
+      paymentStatus?: "created" | "requires_action" | "processing" | "succeeded" | "failed" | "refunded" | "canceled" | "pending" | "paid";
+      /** Format: uuid */
+      paymentId?: string;
     };
     BookingCreate: {
-      /** Format: uuid */
-      salonId: string;
       /** Format: uuid */
       customerId?: string;
       customer?: components["schemas"]["CustomerCreate"];
@@ -682,17 +1469,45 @@ export interface components {
       staffId: string;
       /** Format: uuid */
       serviceId: string;
-      /** Format: date-time */
-      startTime: string;
-      /** Format: date-time */
-      endTime: string;
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp, must align to 15-minute grid.
+       */
+      startUtc: string;
+      /**
+       * Format: date-time
+       * @description Optional; server computes endTime based on service duration.
+       */
+      endUtc?: string;
+      /**
+       * Format: date-time
+       * @description Deprecated alias for startUtc.
+       */
+      startTime?: string;
+      /**
+       * Format: date-time
+       * @description Deprecated alias for endUtc.
+       */
+      endTime?: string;
       notes?: string;
     };
+    BookingResponse: {
+      booking: components["schemas"]["Booking"];
+    };
+    CancelBookingRequest: {
+      reasonKey?: string;
+      note?: string;
+    };
+    RescheduleBookingRequest: {
+      /** Format: uuid */
+      staffId: string;
+      /**
+       * Format: date-time
+       * @description UTC ISO timestamp, must align to 15-minute grid.
+       */
+      startUtc: string;
+    };
     BookingUpdate: {
-      /** Format: date-time */
-      startTime?: string;
-      /** Format: date-time */
-      endTime?: string;
       /** @enum {string} */
       status?: "pending" | "confirmed" | "in_progress" | "completed" | "cancelled" | "no_show";
       notes?: string;
@@ -701,12 +1516,12 @@ export interface components {
       data: components["schemas"]["Booking"][];
     };
     BookingCheckoutRequest: {
-      /** @enum {string} */
-      provider?: "stripe" | "mobilepay";
       /** Format: uri */
       successUrl: string;
       /** Format: uri */
       cancelUrl: string;
+      /** @description Optional idempotency key for checkout creation. */
+      idempotencyKey?: string;
     };
     BookingCheckoutResponse: {
       /** Format: uri */
@@ -714,21 +1529,109 @@ export interface components {
       /** Format: uuid */
       paymentId: string;
       /** @enum {string} */
-      provider: "stripe" | "mobilepay";
+      provider: "stripe";
+    };
+    BookingAccessToken: {
+      bookingToken: string;
+      /** Format: date-time */
+      expiresAt?: string | null;
+    };
+    PublicSalon: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      slug: string;
+      /** @enum {string} */
+      status?: "draft" | "active";
+      locale: string;
+      currency: string;
+      timezone: string;
+      cancellationWindowMinutes: number;
+    };
+    PublicStaff: {
+      /** Format: uuid */
+      id: string;
+      name: string;
+      /** @enum {string} */
+      role: "owner" | "admin" | "staff";
+      active: boolean;
+    };
+    PublicStaffList: {
+      data: components["schemas"]["PublicStaff"][];
+    };
+    PublicBookingCreate: {
+      salonSlug: string;
+      /** Format: uuid */
+      serviceId: string;
+      /** Format: uuid */
+      staffId?: string;
+      /** Format: date-time */
+      startUtc: string;
+      notes?: string;
+      idempotencyKey?: string;
+      customer: {
+        name: string;
+        /** Format: email */
+        email?: string;
+        phone?: string;
+      };
+    };
+    PublicBookingCreateResponse: {
+      booking: components["schemas"]["Booking"];
+      bookingToken: string;
+      /** Format: date-time */
+      expiresAt?: string | null;
+    };
+    PublicBookingCheckoutRequest: {
+      token: string;
+      /** Format: uri */
+      successUrl: string;
+      /** Format: uri */
+      cancelUrl: string;
+    };
+    PublicBookingCancelRequest: {
+      token: string;
+      reasonKey?: string;
+      note?: string;
+    };
+    PublicBookingRescheduleRequest: {
+      token: string;
+      /** Format: uuid */
+      staffId?: string;
+      /** Format: date-time */
+      startUtc: string;
     };
     Payment: {
       /** Format: uuid */
       id: string;
       /** Format: uuid */
+      salonId: string;
+      /** Format: uuid */
       bookingId: string;
       /** @enum {string} */
-      status: "pending" | "paid" | "failed" | "refunded";
+      status: "created" | "requires_action" | "processing" | "succeeded" | "failed" | "refunded" | "canceled" | "pending" | "paid";
       /** @description Minor units (e.g., øre) */
       amount: number;
       currency: string;
       /** @enum {string} */
-      provider: "stripe" | "mobilepay";
+      provider: "stripe";
       providerReference?: string;
+      providerIntentId?: string;
+      providerEventId?: string;
+      idempotencyKey?: string;
+    };
+    RefundPaymentRequest: {
+      idempotencyKey?: string;
+      reason?: string;
+    };
+    RefundPaymentResponse: {
+      payment: components["schemas"]["Payment"];
+      idempotent: boolean;
+    };
+    ReconcilePaymentResponse: {
+      payment: components["schemas"]["Payment"];
+      /** @enum {string} */
+      action: "noop" | "updated";
     };
     /** @description Raw Stripe webhook payload. Schema is intentionally minimal for forward compatibility. */
     StripeWebhookEvent: {
@@ -750,6 +1653,34 @@ export interface components {
       data?: {
         [key: string]: unknown;
       };
+    };
+    OutboxEntry: {
+      /** Format: uuid */
+      id: string;
+      /** Format: uuid */
+      salonId: string;
+      /** Format: uuid */
+      bookingId?: string | null;
+      type: string;
+      /** @enum {string} */
+      channel: "email" | "sms" | "push";
+      provider: string;
+      recipient: string;
+      payload: {
+        [key: string]: unknown;
+      };
+      /** @enum {string} */
+      status: "pending" | "processing" | "sent" | "failed";
+      dedupeKey?: string | null;
+      attempts: number;
+      /** Format: date-time */
+      nextAttemptAt?: string | null;
+      /** Format: date-time */
+      lockedAt?: string | null;
+      lockedBy?: string | null;
+    };
+    OutboxListResponse: {
+      entries: components["schemas"]["OutboxEntry"][];
     };
     DeviceRegisterRequest: {
       deviceId: string;
@@ -775,6 +1706,8 @@ export interface components {
     CustomerId: string;
     BookingId: string;
     PaymentId: string;
+    /** @description Optional idempotency key to safely retry creates. */
+    IdempotencyKey?: string;
   };
   requestBodies: never;
   headers: never;

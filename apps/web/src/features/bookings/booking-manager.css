@@ -1,0 +1,92 @@
+.bm-root {
+  padding: 24px;
+}
+
+.bm-center {
+  padding: 24px;
+}
+
+.bm-card {
+  width: 100%;
+  max-width: 520px;
+}
+
+.bm-muted {
+  color: var(--ink-muted);
+}
+
+.bm-salon {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-muted);
+}
+
+.bm-wrap {
+  flex-wrap: wrap;
+}
+
+.bm-col {
+  flex: 1 1 200px;
+}
+
+.bm-label {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+.bm-actions {
+  margin-top: 16px;
+}
+
+.bm-slots {
+  margin-top: 16px;
+}
+
+.bm-slot-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+
+.bm-slot-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.bm-action {
+  font-size: 0.875rem;
+  color: var(--primary);
+}
+
+.bm-status-card {
+  margin-top: 16px;
+  background: var(--primary-100);
+  border-color: var(--primary);
+}
+
+.bm-status-text {
+  margin: 0;
+  color: var(--primary);
+}
+
+.bm-error-card {
+  margin-top: 16px;
+  border-color: var(--error);
+}
+
+.bm-error-card-alt {
+  background: var(--error-soft);
+}
+
+.bm-error-text {
+  margin: 0;
+  color: var(--error);
+}

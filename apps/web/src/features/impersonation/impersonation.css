@@ -1,0 +1,88 @@
+.imp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.imp-modal-card {
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: auto;
+}
+
+.imp-modal-body {
+  padding: 24px;
+}
+
+.imp-modal-title {
+  margin: 0;
+}
+
+.imp-modal-subtitle {
+  color: var(--ink-muted);
+  margin: 0;
+}
+
+.imp-modal-list {
+  max-height: 400px;
+  overflow: auto;
+}
+
+.imp-user-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.imp-user-meta {
+  font-size: 0.875rem;
+  color: var(--ink-muted);
+}
+
+.imp-list-empty {
+  text-align: center;
+  padding: 24px;
+  color: var(--ink-muted);
+}
+
+.imp-error-banner {
+  border: 1px solid var(--error);
+  background: color-mix(in srgb, var(--error) 12%, white);
+}
+
+.imp-error-text {
+  color: var(--error);
+  margin: 0;
+}
+
+.imp-banner {
+  position: relative;
+  background: var(--warning-soft);
+  border: 1px solid var(--warning);
+}
+
+.imp-banner-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.imp-banner-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
+.imp-banner-salon {
+  color: var(--ink-muted);
+  margin-left: 8px;
+}

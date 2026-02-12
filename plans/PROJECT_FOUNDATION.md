@@ -82,7 +82,6 @@ Source of truth for scope: README.md (Project Constitution).
   - Empty state
   - Error boundary
   - Mobile layout + navigation
-  - MobilePay QR modal (if payments use MobilePay)
 - Reference mapping: nemsalon/src/components-new/mobile-wrappers/README.md
 
 ## 10) First week plan (no fluff)
@@ -108,16 +107,22 @@ Day 5
 - Staging deploy running
 
 ## 11) Decision log (confirm)
-- Payment provider: Stripe + MobilePay (Stripe default i golden path).
+ - Payment provider: Stripe.
 - SMS provider: Twilio.
 - Email provider: Postmark.
 - Push provider: FCM.
 
 ## 12) Onboarding v1 funnel (UI + API)
+Fokus: Første booking på <10 min
+
+Alt der ikke direkte understøtter dette er out of scope
+
+POS, marketing, loyalty, multi-lokation = senere
+
 Goal: fast first booking with minimal setup. Two required steps, one optional, then CTA.
 
 Entry gate
-- If GET /v1/me returns membership + salon, skip onboarding and go to dashboard.
+- If GET /v1/auth/me returns membership + salon, skip onboarding and go to dashboard.
 - Else start onboarding.
 
 Step 1: Salon setup (required)
@@ -125,8 +130,9 @@ Step 1: Salon setup (required)
 - Defaults: timezone from browser, locale from browser (en/da), currency default DKK for da-DK else EUR (or choose).
 - Validation: name 2-60 chars; timezone IANA; locale string; currency ISO-4217; business hours start < end, at least 1 day.
 - API:
-  - POST /v1/salons { name, timezone, locale, currency }
-  - PUT /v1/salons/{id}/business-hours { weekly: [{ day, start, end }] }
+  - /v1/auth/me provisions a draft salon for the user (primary salon).
+  - PATCH /v1/salons/{id} { name?, timezone?, locale?, currency? }
+  - PUT /v1/salons/{id}/business-hours { weekly: [{ day, startTime, endTime, enabled }] }
 
 Step 2: Staff + services (required)
 - UI: two cards on one screen.
@@ -135,10 +141,10 @@ Step 2: Staff + services (required)
 - Assign staff to service (checkbox default on). Require at least 1 staff + 1 service.
 - Validation: name 2-60 chars; role enum; duration 5-480; price integer minor units; buffer from allowed list.
 - API:
-  - POST /v1/salons/{id}/staff { name, role }
-  - PUT /v1/staff/{staffId}/working-hours (only if custom)
-  - POST /v1/salons/{id}/services { name, durationMin, priceAmount, currency, bufferMin }
-  - POST /v1/staff/{staffId}/services { serviceId } or { serviceIds: [] }
+  - POST /v1/staff { name, role } (salon derived from auth context)
+  - POST /v1/services { name, durationMinutes, price, currency, bufferMinutes? }
+  - POST /v1/staff/{staffId}/services { serviceIds: [] }
+  - TODO later: PUT /v1/staff/{staffId}/working-hours (only if custom)
 
 Optional Step 3: Payments setup (optional)
 - UI: toggle "Enable online payments now?"
@@ -158,3 +164,13 @@ Empty states + error UX (v1)
 - If no staff/services: show "Complete onboarding" CTA.
 - If booking overlap: "Time just got booked - pick another slot."
 - If checkout fails: booking stays, payment pending.
+
+Onboarding v1 is done when:
+
+En ny bruger kan oprette salon, staff og service
+
+Brugeren kan lave én bekræftet booking
+
+En email confirmation sendes (SMS hvis plan tillader)
+
+Ingen manuel DB-ændring er nødvendig

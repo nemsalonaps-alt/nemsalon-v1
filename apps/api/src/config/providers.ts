@@ -1,5 +1,7 @@
 import { env, requireEnv } from './env.js';
 
+const useMockNotifications = env.FEATURE_NOTIFICATIONS === 'mock' || env.NODE_ENV === 'test';
+
 export const providers = {
   payments: {
     stripe: {
@@ -7,20 +9,16 @@ export const providers = {
       enabled: Boolean(env.STRIPE_SECRET_KEY),
       requireConfig: () =>
         requireEnv(['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'], 'Stripe is not configured')
-    },
-    mobilepay: {
-      name: 'mobilepay',
-      enabled: Boolean(env.MOBILEPAY_CLIENT_ID && env.MOBILEPAY_CLIENT_SECRET)
     }
   },
   notifications: {
     sms: {
-      provider: 'twilio',
-      enabled: Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM)
+      provider: useMockNotifications ? 'mock' : 'twilio',
+      enabled: useMockNotifications || Boolean(env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM)
     },
     email: {
-      provider: 'postmark',
-      enabled: Boolean(env.POSTMARK_SERVER_TOKEN && env.POSTMARK_FROM)
+      provider: useMockNotifications ? 'mock' : 'postmark',
+      enabled: useMockNotifications || Boolean(env.POSTMARK_SERVER_TOKEN && env.POSTMARK_FROM)
     },
     push: {
       provider: 'fcm',

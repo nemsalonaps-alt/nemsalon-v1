@@ -3,7 +3,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "echo \"TODO: setup web app\"",
-    "build": "echo \"TODO: build web app\""
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@nemsalon/shared": "workspace:*",
+    "@nemsalon/ui": "workspace:*",
+    "@supabase/supabase-js": "^2.48.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.2.0"
   }
 }
