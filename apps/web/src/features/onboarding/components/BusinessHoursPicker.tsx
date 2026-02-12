@@ -1,6 +1,7 @@
 import type { WeeklyHours, DayId } from '../types';
 import { getDayLabels } from '../schema';
 import { getCopy } from '../copy';
+import { Card, Stack } from '@nemsalon/ui';
 
 type BusinessHoursPickerProps = {
   weekly: WeeklyHours[];
@@ -13,12 +14,12 @@ export function BusinessHoursPicker({ weekly, onChange, error, locale }: Busines
   const copy = getCopy(locale);
   const dayLabels = getDayLabels(locale);
   return (
-    <div className="panel" style={{ marginTop: 18 }}>
+    <Card variant="outlined" className="onb-hours-card">
       <h2>{copy.salon.hours.title}</h2>
-      <p>{copy.salon.hours.body}</p>
+      <p className="onb-note">{copy.salon.hours.body}</p>
       {weekly.map((day) => (
-        <div key={day.day} className="hours-row">
-          <label className="toggle">
+        <Stack key={day.day} direction="row" gap="md" align="center" className="onb-hours-row">
+          <label className="onb-label-inline">
             <input
               type="checkbox"
               checked={day.enabled}
@@ -27,25 +28,25 @@ export function BusinessHoursPicker({ weekly, onChange, error, locale }: Busines
             {dayLabels[day.day]}
           </label>
           <input
-            className="input"
             type="time"
+            className="onb-input-sm"
             value={day.start}
             onChange={(event) => onChange(day.day, { start: event.target.value })}
             disabled={!day.enabled}
           />
           <input
-            className="input"
             type="time"
+            className="onb-input-sm"
             value={day.end}
             onChange={(event) => onChange(day.day, { end: event.target.value })}
             disabled={!day.enabled}
           />
-        </div>
+        </Stack>
       ))}
-      {error && <span className="error">{error}</span>}
-      <div className="note" style={{ marginTop: 12 }}>
+      {error && <span className="onb-error onb-error-block">{error}</span>}
+      <p className="onb-hours-note">
         {copy.salon.hours.note}
-      </div>
-    </div>
+      </p>
+    </Card>
   );
 }

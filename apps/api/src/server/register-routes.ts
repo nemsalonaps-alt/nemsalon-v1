@@ -1,8 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { registerAuthRoutes } from '../modules/auth/api/routes.js';
-import { registerStaffAuthRoutes } from '../modules/staff-auth/api/routes.js';
-import { registerCustomerAuthRoutes } from '../modules/customer-auth/api/routes.js';
-import { registerCustomerPortalRoutes } from '../modules/customer-portal/api/routes.js';
+import { registerImpersonationRoutes } from '../modules/auth/api/impersonation-routes.js';
+import {
+  registerCustomerPortalRoutes,
+  registerCustomerPortalV2Routes,
+} from '../modules/customer-portal/api/routes.js';
 import { registerPublicRoutes } from '../modules/public/api/routes.js';
 import { registerUsersRoutes } from '../modules/users/api/routes.js';
 import { registerContentRoutes } from '../modules/content/api/routes.js';
@@ -12,14 +14,15 @@ import { registerAdminRoutes } from '../modules/admin/api/routes.js';
 import { registerAvailabilityRoutes } from '../modules/availability/api/routes.js';
 import { registerPlatformRoutes } from '../modules/platform/api/routes.js';
 import { registerEventsRoutes } from '../modules/events/api/routes.js';
+import { registerDevRoutes } from '../modules/dev/api/routes.js';
 import { env } from '../config/env.js';
 
 export function registerRoutes(app: FastifyInstance) {
   registerPublicRoutes(app);
   registerAuthRoutes(app);
-  registerStaffAuthRoutes(app);
-  registerCustomerAuthRoutes(app);
+  registerImpersonationRoutes(app);
   registerCustomerPortalRoutes(app);
+  registerCustomerPortalV2Routes(app);
   registerUsersRoutes(app);
   registerContentRoutes(app);
   registerEventsRoutes(app);
@@ -36,4 +39,5 @@ export function registerRoutes(app: FastifyInstance) {
   }
   registerPlatformRoutes(app);
   registerAdminRoutes(app);
+  registerDevRoutes(app);
 }

@@ -72,7 +72,8 @@ create or replace function provision_salon_for_user(
   p_user_id uuid,
   p_email text,
   p_full_name text,
-  p_phone text
+  p_phone text,
+  p_role text default 'owner'
 )
 returns uuid as $$
 declare
@@ -112,7 +113,7 @@ begin
     returning id into v_salon_id;
 
     insert into memberships (salon_id, user_id, role, active)
-    values (v_salon_id, p_user_id, 'owner', true)
+    values (v_salon_id, p_user_id, p_role, true)
     on conflict (salon_id, user_id) do nothing;
 
     update users
@@ -131,7 +132,7 @@ begin
     on conflict (salon_id, day) do nothing;
   else
     insert into memberships (salon_id, user_id, role, active)
-    values (v_salon_id, p_user_id, 'owner', true)
+    values (v_salon_id, p_user_id, p_role, true)
     on conflict (salon_id, user_id) do nothing;
   end if;
 

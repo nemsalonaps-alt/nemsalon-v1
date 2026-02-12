@@ -1,8 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect } from 'react';
 import type { GateState } from '../types';
 import { getCopy } from '../copy';
-import { hasSupabaseConfig, signInWithPassword, signUpWithPassword } from '../../../lib/auth';
-import { trackEvent } from '../api';
+import { Card, Badge, Stack, Button } from '@nemsalon/ui';
 
 type GateProps = {
   state: GateState;
@@ -12,176 +11,77 @@ type GateProps = {
 
 export function Gate({ state, onRetry, onReviewSettings }: GateProps) {
   const copy = getCopy();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [devStatus, setDevStatus] = useState('');
-  const [devSubmitting, setDevSubmitting] = useState(false);
-  const isDev = import.meta.env.DEV;
-  const hasDevUserId = Boolean(import.meta.env.VITE_DEV_USER_ID);
 
-  const handleLogin = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!hasSupabaseConfig) {
-      setError(copy.gate.needsLogin.missingConfig);
-      return;
+  // Redirect to unified login when not authenticated
+  useEffect(() => {
+    if (state === 'needs-login') {
+      window.location.href = '/login';
     }
-    if (!email || !password) {
-      setError(copy.gate.needsLogin.missingFields);
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-    const result = await signInWithPassword(email, password);
-    setSubmitting(false);
-    if (!result.ok) {
-      setError((copy.apiErrors as Record<string, string>)[result.errorKey] ?? copy.apiErrors.generic);
-      return;
-    }
-    trackEvent('auth.login_success', { method: 'password' }).catch(() => {});
-    onRetry();
-  };
-
-  const handleDevBypass = () => {
-    setDevStatus(copy.gate.devHelper.bypassNotice);
-    trackEvent('auth.login_success', { method: 'dev_bypass' }).catch(() => {});
-    onRetry();
-  };
-
-  const handleDevSignUp = async () => {
-    if (!hasSupabaseConfig) {
-      setDevStatus(copy.gate.devHelper.missingConfig);
-      return;
-    }
-    if (!email || !password) {
-      setDevStatus(copy.gate.devHelper.missingFields);
-      return;
-    }
-    setDevSubmitting(true);
-    setDevStatus('');
-    const result = await signUpWithPassword(email, password);
-    setDevSubmitting(false);
-    if (!result.ok) {
-      setDevStatus((copy.apiErrors as Record<string, string>)[result.errorKey] ?? copy.apiErrors.generic);
-      return;
-    }
-    if (!result.needsConfirm) {
-      setDevStatus(copy.gate.devHelper.createdAndSignedIn);
-      trackEvent('auth.login_success', { method: 'password' }).catch(() => {});
-      onRetry();
-      return;
-    }
-    setDevStatus(copy.gate.devHelper.createdNeedsConfirm);
-  };
+  }, [state]);
 
   if (state === 'checking') {
     return (
-      <div className="panel">
-        <span className="badge">{copy.gate.checking.badge}</span>
+      <Card>
+        <Badge>{copy.gate.checking.badge}</Badge>
         <h1>{copy.gate.checking.title}</h1>
         <p>{copy.gate.checking.body}</p>
-        <div className="note">{copy.gate.checking.note}</div>
-      </div>
+        <p className="onb-gate-note">{copy.gate.checking.note}</p>
+      </Card>
+    );
+  }
+
+  if (state === 'recovering') {
+    return (
+      <Card>
+        <Badge>{copy.gate.recovering.badge}</Badge>
+        <h1>{copy.gate.recovering.title}</h1>
+        <p>{copy.gate.recovering.body}</p>
+        <p className="onb-gate-note">{copy.gate.checking.note}</p>
+      </Card>
     );
   }
 
   if (state === 'has-salon') {
     return (
-      <div className="panel">
-        <span className="badge">{copy.gate.hasSalon.badge}</span>
+      <Card>
+        <Badge>{copy.gate.hasSalon.badge}</Badge>
         <h1>{copy.gate.hasSalon.title}</h1>
         <p>{copy.gate.hasSalon.body}</p>
-        <div className="btn-row">
-          <button
-            className="btn primary"
-            type="button"
+        <Stack direction="row" gap="md">
+          <Button
+            variant="primary"
             onClick={onReviewSettings}
             disabled={!onReviewSettings}
           >
             {copy.gate.hasSalon.primaryAction}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Stack>
+      </Card>
     );
   }
 
   if (state === 'error') {
     return (
-      <div className="panel">
-        <span className="badge">{copy.gate.error.badge}</span>
+      <Card>
+        <Badge>{copy.gate.error.badge}</Badge>
         <h1>{copy.gate.error.title}</h1>
         <p>{copy.gate.error.body}</p>
-        <div className="btn-row">
-          <button className="btn primary" type="button" onClick={onRetry}>
+        <Stack direction="row" gap="md">
+          <Button variant="primary" onClick={onRetry}>
             {copy.gate.error.primaryAction}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Stack>
+      </Card>
     );
   }
 
   if (state === 'needs-login') {
     return (
-      <div className="panel">
-        <span className="badge">{copy.gate.needsLogin.badge}</span>
+      <Card>
+        <Badge>{copy.gate.needsLogin.badge}</Badge>
         <h1>{copy.gate.needsLogin.title}</h1>
-        <p>{copy.gate.needsLogin.body}</p>
-        <form className="panel" style={{ marginTop: 16 }} onSubmit={handleLogin}>
-          <label className="field">
-            <span className="label">{copy.gate.needsLogin.emailLabel}</span>
-            <input
-              className="input"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span className="label">{copy.gate.needsLogin.passwordLabel}</span>
-            <input
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-          {error && <div className="banner">{error}</div>}
-          <div className="btn-row">
-            <button className="btn primary" type="submit" disabled={submitting}>
-              {submitting ? copy.gate.needsLogin.signingIn : copy.gate.needsLogin.signIn}
-            </button>
-            <button className="btn ghost" type="button" onClick={onRetry}>
-              {copy.gate.needsLogin.secondaryAction}
-            </button>
-          </div>
-        </form>
-        {isDev && (
-          <div className="panel" style={{ marginTop: 16 }}>
-            <div className="badge">{copy.gate.devHelper.badge}</div>
-            <h2>{copy.gate.devHelper.title}</h2>
-            <p>{copy.gate.devHelper.body}</p>
-            <div className="btn-row">
-              {hasDevUserId && (
-                <button className="btn ghost" type="button" onClick={handleDevBypass}>
-                  {copy.gate.devHelper.useBypass}
-                </button>
-              )}
-              <button
-                className="btn primary"
-                type="button"
-                onClick={handleDevSignUp}
-                disabled={devSubmitting}
-              >
-                {devSubmitting ? copy.gate.devHelper.creating : copy.gate.devHelper.createUser}
-              </button>
-            </div>
-            {devStatus && <div className="note">{devStatus}</div>}
-          </div>
-        )}
-      </div>
+        <p>{copy.gate.needsLogin.redirecting}</p>
+      </Card>
     );
   }
 

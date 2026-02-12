@@ -1,203 +1,269 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { signInWithPassword, signOut } from '../../../lib/auth';
+import { Button, Card, Badge, Input, Stack } from '@nemsalon/ui';
+import { getSalonSlugFromHostname, getSalonSlugFromPath } from '../../../lib/public-url';
+import { getCopy } from '../../../i18n';
+import '../auth.css';
 
-type LoginRole = 'owner' | 'staff' | 'customer';
+type AuthMode = 'login' | 'register';
 
 interface UnifiedLoginProps {
   onLoginSuccess: () => void;
 }
 
 export function UnifiedLogin({ onLoginSuccess }: UnifiedLoginProps) {
-  const [role, setRole] = useState<LoginRole>('owner');
+  const [mode, setMode] = useState<AuthMode>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [pin, setPin] = useState('');
+  const [name, setName] = useState('');
+  const [salonSlug, setSalonSlug] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const copy = getCopy().auth;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const slugFromQuery = params.get('salon');
+    const slugFromPath = getSalonSlugFromPath(window.location.pathname);
+    const slugFromHost = getSalonSlugFromHostname(window.location.hostname);
+    const resolved = slugFromQuery || slugFromPath || slugFromHost || '';
+    setSalonSlug(resolved);
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
 
     try {
-      if (role === 'owner' || role === 'customer') {
-        // Email + password login via Supabase
-        const result = await signInWithPassword(email, password);
-        if (!result.ok) {
-          setError('Invalid email or password');
-          return;
-        }
-      } else {
-        // Staff PIN login via custom API (token set in httpOnly cookie)
-        const response = await fetch('/v1/auth/staff/login-pin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, pin }),
-          credentials: 'include' // Important: send/receive cookies
-        });
-        
-        if (!response.ok) {
-          setError('Invalid email or PIN');
-          return;
-        }
-        
-        // Token is in httpOnly cookie, not response body
-        const data = await response.json();
-        localStorage.setItem('staff_id', data.staffId);
+      const result = await signInWithPassword(email, password);
+      if (!result.ok) {
+        setError(copy.errors.invalidCredentials);
+        return;
       }
-      
+
       onLoginSuccess();
     } catch (err) {
-      setError('Login failed. Please try again.');
+      setError(copy.errors.loginFailed);
     } finally {
       setLoading(false);
     }
   };
 
-  const roleTabs: { id: LoginRole; label: string }[] = [
-    { id: 'owner', label: 'Salon Owner' },
-    { id: 'staff', label: 'Staff' },
-    { id: 'customer', label: 'Customer' }
-  ];
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const response = await fetch('/v1/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          name,
+          role: 'customer',
+          salonSlug: salonSlug || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response
+          .json()
+          .catch(() => ({ message: copy.errors.registrationFailed }));
+        if (data.details?.fieldErrors) {
+          const fieldErrors = Object.entries(data.details.fieldErrors)
+            .map(([field, errors]) => `${field}: ${(errors as string[]).join(', ')}`)
+            .join('; ');
+          setError(fieldErrors || data.message || copy.errors.registrationFailed);
+        } else {
+          setError(data.message || data.error || copy.errors.registrationFailed);
+        }
+        return;
+      }
+
+      const loginResult = await signInWithPassword(email, password);
+      if (!loginResult.ok) {
+        setError(copy.errors.autoLoginFailed);
+        setMode('login');
+        return;
+      }
+      onLoginSuccess();
+    } catch (err) {
+      setError(copy.errors.registrationFailedRetry);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="panel" style={{ maxWidth: 400, margin: '40px auto' }}>
-      <span className="badge">Login</span>
-      <h1>Welcome to Nemsalon</h1>
-      <p>Select your role to continue</p>
+    <Card className="auth-card">
+      <Badge>{mode === 'login' ? copy.badgeLogin : copy.badgeRegister}</Badge>
+      <h1>{copy.title}</h1>
+      <p>{mode === 'login' ? copy.loginSubtitle : copy.registerSubtitle}</p>
 
-      <div className="role-tabs" style={{ 
-        display: 'flex', 
-        gap: 8, 
-        marginBottom: 24,
-        borderBottom: '1px solid var(--border)',
-        paddingBottom: 16
-      }}>
-        {roleTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`btn ${role === tab.id ? 'primary' : 'ghost'}`}
-            onClick={() => {
-              setRole(tab.id);
-              setError('');
-            }}
-            style={{ flex: 1 }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      <form onSubmit={handleSubmit}>
-        <label className="field">
-          <span className="label">Email</span>
-          <input
-            className="input"
+      {mode === 'login' ? (
+        <form onSubmit={handleLogin}>
+          <Input
+            label={copy.emailLabel}
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
+            fullWidth
+            data-testid="login-email"
           />
-        </label>
 
-        {role === 'staff' ? (
-          <label className="field">
-            <span className="label">PIN Code</span>
-            <input
-              className="input"
-              type="password"
-              inputMode="numeric"
-              pattern="\d{4,6}"
-              maxLength={6}
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="4-6 digits"
+          <Input
+            label={copy.passwordLabel}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            fullWidth
+            data-testid="login-password"
+          />
+
+          {error && (
+            <Card variant="outlined" className="auth-error-card">
+              <p data-testid="auth-error" className="auth-error-text">
+                {error}
+              </p>
+            </Card>
+          )}
+
+          <Stack direction="row" gap="md" className="auth-actions">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleLogin}
+              isLoading={loading}
+              fullWidth
+              data-testid="login-submit"
+            >
+              {loading ? copy.signingIn : copy.signIn}
+            </Button>
+          </Stack>
+        </form>
+      ) : (
+        <form onSubmit={handleRegister}>
+          <Input
+            label={copy.nameLabel}
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            minLength={2}
+            fullWidth
+            data-testid="register-name"
+          />
+
+          <Input
+            label={copy.emailLabel}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            fullWidth
+            data-testid="register-email"
+          />
+
+          <Input
+            label={copy.passwordLabel}
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            fullWidth
+            hint={copy.passwordHint}
+            data-testid="register-password"
+          />
+          {!salonSlug && (
+            <Input
+              label={copy.salonSlugLabel}
+              type="text"
+              value={salonSlug}
+              onChange={(e) => setSalonSlug(e.target.value)}
               required
+              fullWidth
+              hint={copy.salonSlugHint}
+              data-testid="register-salon-slug"
             />
-          </label>
-        ) : (
-          <label className="field">
-            <span className="label">Password</span>
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </label>
-        )}
+          )}
 
-        {error && (
-          <div className="banner" style={{ marginTop: 16 }}>
-            {error}
-          </div>
-        )}
+          {error && (
+            <Card variant="outlined" className="auth-error-card">
+              <p data-testid="auth-error" className="auth-error-text">
+                {error}
+              </p>
+            </Card>
+          )}
 
-        <div className="btn-row" style={{ marginTop: 24 }}>
-          <button 
-            className="btn primary" 
-            type="submit"
-            disabled={loading}
-            style={{ flex: 1 }}
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </div>
-      </form>
+          {successMessage && (
+            <Card variant="outlined" className="auth-success-card">
+              <p className="auth-success-text">{successMessage}</p>
+            </Card>
+          )}
 
-      {role === 'staff' && (
-        <div className="note" style={{ marginTop: 16, textAlign: 'center' }}>
-          First time? Check your email for an invitation link to set up your PIN.
-        </div>
+          <Stack direction="row" gap="md" className="auth-actions">
+            <Button
+              variant="primary"
+              size="md"
+              onClick={handleRegister}
+              isLoading={loading}
+              fullWidth
+              data-testid="register-submit"
+            >
+              {loading ? copy.creatingAccount : copy.createAccount}
+            </Button>
+          </Stack>
+        </form>
       )}
 
-      {role === 'customer' && (
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <a href="/register" className="link">Create an account</a>
-        </div>
-      )}
-    </div>
+      <div className="auth-switch">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setMode(mode === 'login' ? 'register' : 'login');
+            setError('');
+            setSuccessMessage('');
+          }}
+          data-testid="auth-mode-toggle"
+        >
+          {mode === 'login' ? copy.switchToRegister : copy.switchToLogin}
+        </Button>
+      </div>
+    </Card>
   );
 }
 
-// Logout button component for use in consoles
 export function LogoutButton({ onLogout }: { onLogout?: () => void }) {
   const [loading, setLoading] = useState(false);
+  const copy = getCopy().auth;
 
   const handleLogout = async () => {
     setLoading(true);
-    
-    // Call logout endpoint - cookie will be cleared server-side
-    try {
-      await fetch('/v1/auth/staff/logout', {
-        method: 'POST',
-        credentials: 'include'
-      });
-    } catch (e) {
-      // Ignore errors
-    }
-    
-    // Clear localStorage items
-    localStorage.removeItem('staff_id');
-    
-    // Sign out from Supabase
+
     await signOut();
-    
+
     onLogout?.();
     window.location.href = '/login';
   };
 
   return (
-    <button 
-      className="btn ghost" 
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={handleLogout}
-      disabled={loading}
-      title="Log out"
+      isLoading={loading}
+      title={copy.logoutTitle}
     >
-      {loading ? '...' : 'Logout'}
-    </button>
+      {loading ? copy.loggingOut : copy.logoutLabel}
+    </Button>
   );
 }

@@ -25,15 +25,6 @@ const C = {
   bold: '\x1b[1m'
 };
 
-// Layer ordering (lower = deeper/core)
-const LAYERS = {
-  'domain': 0,
-  'repo': 1,
-  'service': 2,
-  'api': 3,
-  'worker': 2  // Workers are at service level
-};
-
 // Parse an import statement to extract the module and layer
 function parseImportPath(importPath, currentFile) {
   // Handle relative imports from modules

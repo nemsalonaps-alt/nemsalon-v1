@@ -128,7 +128,8 @@ export function registerContentRoutes(app: FastifyInstance) {
     from: z.string().datetime().optional(),
     to: z.string().datetime().optional(),
     staffId: z.string().uuid().optional(),
-    status: z.enum(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show']).optional()
+    status: z.enum(['pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show']).optional(),
+    limit: z.coerce.number().int().min(1).max(1000).optional()
   });
 
   const bookingCancelSchema = z
@@ -188,13 +189,27 @@ export function registerContentRoutes(app: FastifyInstance) {
     const params = z.object({ salonId: z.string().uuid() }).parse(request.params);
     request.log.info({ salonId: params.salonId }, 'Activating salon - start');
     
-    await authService.requireRole(request, params.salonId, 'owner');
-    request.log.info({ salonId: params.salonId }, 'User authorized, calling activateSalon');
-    
-    const salon = await contentService.activateSalon(params.salonId);
-    request.log.info({ salonId: salon.id, status: salon.status }, 'Salon activated successfully');
-    
-    reply.code(200).send({ id: salon.id, status: salon.status });
+    try {
+      await authService.requireRole(request, params.salonId, 'owner');
+      request.log.info({ salonId: params.salonId }, 'User authorized, calling activateSalon');
+      
+      const salon = await contentService.activateSalon(params.salonId);
+      request.log.info({ salonId: salon.id, status: salon.status }, 'Salon activated successfully');
+      
+      reply.code(200).send({ id: salon.id, status: salon.status });
+    } catch (error) {
+      request.log.error({
+        salonId: params.salonId,
+        error: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+          code: (error as { code?: string }).code
+        } : error,
+        step: 'activateSalon'
+      }, 'Failed to activate salon');
+      throw error;
+    }
   });
 
   app.patch('/v1/salons/:salonId', async (request, reply) => {
@@ -579,7 +594,8 @@ export function registerContentRoutes(app: FastifyInstance) {
       fromUtc: query.from,
       toUtc: query.to,
       staffId,
-      status: query.status
+      status: query.status,
+      limit: query.limit
     });
     reply.code(200).send({ data: bookings });
   });
@@ -588,23 +604,33 @@ export function registerContentRoutes(app: FastifyInstance) {
     '/v1/bookings',
     { config: { rateLimit: { max: 30, timeWindow: 60_000 } } },
     async (request, reply) => {
-    const body = bookingCreateSchema.parse(request.body);
-    const salonId = await authService.requirePrimarySalonId(request);
-    await authService.requireRole(request, salonId, 'owner');
-    const headerKey = request.headers['idempotency-key'];
-    const idempotencyKey = Array.isArray(headerKey) ? headerKey[0] : headerKey;
-    const booking = await contentService.createBooking({
-      salonId,
-      serviceId: body.serviceId,
-      staffId: body.staffId,
-      startTime: body.startUtc ?? body.startTime ?? '',
-      endTime: body.endUtc ?? body.endTime,
-      idempotencyKey: typeof idempotencyKey === 'string' ? idempotencyKey : undefined,
-      notes: body.notes,
-      customerId: body.customerId,
-      customer: body.customer
-    });
-    reply.code(201).send(booking);
+      const body = bookingCreateSchema.parse(request.body);
+      const salonId = await authService.requirePrimarySalonId(request);
+      await authService.requireRole(request, salonId, 'owner');
+      const headerKey = request.headers['idempotency-key'];
+      const idempotencyKey = Array.isArray(headerKey) ? headerKey[0] : headerKey;
+      
+      console.log('[DEBUG] Creating booking:', {
+        salonId,
+        serviceId: body.serviceId,
+        staffId: body.staffId,
+        startTime: body.startUtc ?? body.startTime,
+        hasCustomer: !!body.customer,
+        hasCustomerId: !!body.customerId
+      });
+      
+      const booking = await contentService.createBooking({
+        salonId,
+        serviceId: body.serviceId,
+        staffId: body.staffId,
+        startTime: body.startUtc ?? body.startTime ?? '',
+        endTime: body.endUtc ?? body.endTime,
+        idempotencyKey: typeof idempotencyKey === 'string' ? idempotencyKey : undefined,
+        notes: body.notes,
+        customerId: body.customerId,
+        customer: body.customer
+      });
+      reply.code(201).send(booking);
     }
   );
 

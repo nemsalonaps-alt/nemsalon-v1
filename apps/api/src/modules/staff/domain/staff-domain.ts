@@ -11,12 +11,7 @@ export type StaffProfile = {
   active: boolean;
 };
 
-export type BusinessHoursEntry = {
-  day: 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
-  startTime: string;
-  endTime: string;
-  enabled: boolean;
-};
+export type { BusinessHoursEntry } from '../../salons/domain/salons-domain.js';
 
 export type StaffTimeOff = {
   id: string;

@@ -89,11 +89,11 @@ export const validateStaffAndService = (
   if (Number.isNaN(durationValue) || durationValue < 5 || durationValue > 480) {
     errors.serviceDuration = copy.validation.staff.serviceDuration;
   }
-  const priceValue = toMinorUnits(service.priceDisplay);
+  const priceValue = toMinorUnits(Number(service.priceDisplay));
   if (Number.isNaN(priceValue) || priceValue <= 0) {
     errors.servicePrice = copy.validation.staff.servicePrice;
   }
-  if (!BufferOptions.includes(service.bufferMinutes)) {
+  if (!(BufferOptions as unknown as number[]).includes(service.bufferMinutes)) {
     errors.serviceBuffer = copy.validation.staff.serviceBuffer;
   }
   if (!assignService) {

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { BookingForm } from '../types';
 import { getCopy } from '../copy';
-import { ConfirmDialog } from '@nemsalon/ui';
+import { ConfirmDialog, Button, Card, Badge, Input, TextArea, Stack } from '@nemsalon/ui';
+import { FeatureState } from '../../../components/FeatureState';
 
 type SlotOption = {
   startUtc: string;
@@ -30,6 +31,7 @@ type FirstBookingCTAProps = {
   slots: SlotOption[];
   slotsLoading: boolean;
   slotsError?: string;
+  onReloadSlots: () => void;
   onPickSlot: (slot: SlotOption) => void;
   onCancelBooking: () => void;
   onReschedule: (slot: SlotOption) => void;
@@ -61,6 +63,7 @@ export function FirstBookingCTA({
   slots,
   slotsLoading,
   slotsError,
+  onReloadSlots,
   onPickSlot,
   onCancelBooking,
   onReschedule,
@@ -102,132 +105,143 @@ export function FirstBookingCTA({
   }
 
   return (
-    <section className="panel">
-      <span className="badge">{copy.cta.badge}</span>
+    <Card>
+      <Badge>{copy.cta.badge}</Badge>
       <h1>{copy.cta.title}</h1>
       <p>{copy.cta.body}</p>
 
       {!assignService && (
-        <div className="banner" style={{ marginBottom: 16 }}>
-          {copy.cta.assignBanner}
-          <button className="btn subtle" type="button" onClick={onFixAssignments}>
-            {copy.cta.fixAssignments}
-          </button>
-        </div>
+        <Card variant="outlined" className="onb-cta-card">
+          <Stack direction="row" gap="md" align="center">
+            <span>{copy.cta.assignBanner}</span>
+            <Button variant="subtle" size="sm" onClick={onFixAssignments}>
+              {copy.cta.fixAssignments}
+            </Button>
+          </Stack>
+        </Card>
       )}
 
-      <div className="cta-hero">
-        <div>
+      <Card variant="muted" className="onb-cta-hero">
+        <Stack gap="sm">
           <h3>{copy.cta.heroTitle}</h3>
           <p>{heroSummary}</p>
-        </div>
-        <div className="note">{copy.cta.heroNote}</div>
-      </div>
+          <p className="onb-cta-note">{copy.cta.heroNote}</p>
+        </Stack>
+      </Card>
 
-      <div className="panel" style={{ marginTop: 16 }}>
-        <div className="badge">{copy.cta.slots.badge}</div>
+      <Card variant="outlined" className="onb-cta-slots">
+        <Badge>{copy.cta.slots.badge}</Badge>
         <h3>{copy.cta.slots.title}</h3>
         <p>{copy.cta.slots.body}</p>
         {slotsLoading ? (
-          <div className="note">{copy.cta.slots.loading}</div>
+          <p className="onb-cta-note">{copy.cta.slots.loading}</p>
+        ) : slotsError && slots.length === 0 ? (
+          <FeatureState
+            status="error"
+            title={copy.cta.slots.errorTitle}
+            description={copy.cta.slots.body}
+            error={slotsError}
+            onRetry={onReloadSlots}
+            retryLabel={copy.cta.actions.reloadSlots}
+            testId="onboarding-availability-fallback"
+          />
         ) : slots.length === 0 ? (
-          <div className="note">{copy.cta.slots.empty}</div>
+          <p className="onb-cta-note">{copy.cta.slots.empty}</p>
         ) : (
-          <div className="btn-row" style={{ flexWrap: 'wrap' }}>
+          <Stack direction="row" gap="sm" className="onb-wrap onb-cta-slot-list">
             {slots.slice(0, 10).map((slot) => (
-              <button
+              <Button
                 key={`${slot.staffId}-${slot.startUtc}`}
-                className="btn ghost"
-                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => onPickSlot(slot)}
               >
                 {slot.label}
-              </button>
+              </Button>
             ))}
-          </div>
+          </Stack>
         )}
-        {slotsError && <div className="banner">{slotsError}</div>}
-      </div>
+        {slotsError && slots.length > 0 && (
+          <Card variant="outlined" className="onb-error-card onb-card-top-sm">
+            <Stack gap="sm">
+              <p className="onb-error">{slotsError}</p>
+              <Button variant="subtle" size="sm" onClick={onReloadSlots}>
+                {copy.cta.actions.reloadSlots}
+              </Button>
+            </Stack>
+          </Card>
+        )}
+      </Card>
 
-      <div className="grid two" style={{ marginTop: 18 }}>
-        <label className="field">
-          <span className="label">{copy.cta.fields.customerNameLabel}</span>
-          <input
-            className="input"
-            value={booking.customerName}
-            onChange={(event) => onBookingChange({ customerName: event.target.value })}
-            placeholder={copy.cta.fields.customerNamePlaceholder}
-          />
-          {errors.customerName && <span className="error">{errors.customerName}</span>}
-        </label>
-        <label className="field">
-          <span className="label">{copy.cta.fields.customerEmailLabel}</span>
-          <input
-            className="input"
-            value={booking.customerEmail}
-            onChange={(event) => onBookingChange({ customerEmail: event.target.value })}
-            placeholder={copy.cta.fields.customerEmailPlaceholder}
-          />
-        </label>
-        <label className="field">
-          <span className="label">{copy.cta.fields.customerPhoneLabel}</span>
-          <input
-            className="input"
-            value={booking.customerPhone}
-            onChange={(event) => onBookingChange({ customerPhone: event.target.value })}
-            placeholder={copy.cta.fields.customerPhonePlaceholder}
-          />
-        </label>
-        <label className="field">
-          <span className="label">{copy.cta.fields.serviceLabel}</span>
-          <input className="input" value={heroService} readOnly />
-        </label>
-        <label className="field">
-          <span className="label">{copy.cta.fields.staffLabel}</span>
-          <input className="input" value={heroStaff} readOnly />
-        </label>
-        <label className="field">
-          <span className="label">{copy.cta.fields.dateLabel}</span>
-          <input
-            className="input"
-            type="date"
-            value={booking.date}
-            onChange={(event) => onBookingChange({ date: event.target.value })}
-          />
-        </label>
-        <label className="field">
-          <span className="label">{copy.cta.fields.startTimeLabel}</span>
-          <input
-            className="input"
-            type="time"
-            value={booking.time}
-            onChange={(event) => onBookingChange({ time: event.target.value })}
-          />
-          {errors.bookingTime && <span className="error">{errors.bookingTime}</span>}
-        </label>
-        <div className="field">
-          <span className="label">{copy.cta.fields.endTimeLabel}</span>
-          <input
-            className="input"
-            value={computedEndTime || copy.cta.fields.endTimePlaceholder}
-            readOnly
-          />
-        </div>
-      </div>
-
-      <label className="field" style={{ marginTop: 16 }}>
-        <span className="label">{copy.cta.fields.notesLabel}</span>
-        <textarea
-          className="textarea"
-          rows={3}
-          value={booking.notes}
-          onChange={(event) => onBookingChange({ notes: event.target.value })}
-          placeholder={copy.cta.fields.notesPlaceholder}
+      <Stack direction="row" gap="md" className="onb-wrap onb-cta-form">
+        <Input
+          label={copy.cta.fields.customerNameLabel}
+          value={booking.customerName}
+          onChange={(event) => onBookingChange({ customerName: event.target.value })}
+          placeholder={copy.cta.fields.customerNamePlaceholder}
+          error={errors.customerName}
+          className="onb-field-250"
         />
-      </label>
+        <Input
+          label={copy.cta.fields.customerEmailLabel}
+          value={booking.customerEmail}
+          onChange={(event) => onBookingChange({ customerEmail: event.target.value })}
+          placeholder={copy.cta.fields.customerEmailPlaceholder}
+          className="onb-field-250"
+        />
+        <Input
+          label={copy.cta.fields.customerPhoneLabel}
+          value={booking.customerPhone}
+          onChange={(event) => onBookingChange({ customerPhone: event.target.value })}
+          placeholder={copy.cta.fields.customerPhonePlaceholder}
+          className="onb-field-250"
+        />
+        <Input
+          label={copy.cta.fields.serviceLabel}
+          value={heroService}
+          readOnly
+          className="onb-field-250"
+        />
+        <Input
+          label={copy.cta.fields.staffLabel}
+          value={heroStaff}
+          readOnly
+          className="onb-field-250"
+        />
+        <Input
+          label={copy.cta.fields.dateLabel}
+          type="date"
+          value={booking.date}
+          onChange={(event) => onBookingChange({ date: event.target.value })}
+          className="onb-field-250"
+        />
+        <Input
+          label={copy.cta.fields.startTimeLabel}
+          type="time"
+          value={booking.time}
+          onChange={(event) => onBookingChange({ time: event.target.value })}
+          error={errors.bookingTime}
+          className="onb-field-250"
+        />
+        <Input
+          label={copy.cta.fields.endTimeLabel}
+          value={computedEndTime || copy.cta.fields.endTimePlaceholder}
+          readOnly
+          className="onb-field-250"
+        />
+      </Stack>
 
-      <div className="grid two" style={{ marginTop: 16 }}>
-        <label className="toggle">
+      <TextArea
+        label={copy.cta.fields.notesLabel}
+        value={booking.notes}
+        onChange={(event) => onBookingChange({ notes: event.target.value })}
+        placeholder={copy.cta.fields.notesPlaceholder}
+        rows={3}
+        className="onb-cta-textarea"
+      />
+
+      <Stack direction="row" gap="lg" className="onb-cta-toggles">
+        <label className="onb-label-inline">
           <input
             type="checkbox"
             checked={booking.sendEmail}
@@ -235,7 +249,7 @@ export function FirstBookingCTA({
           />
           {copy.cta.toggles.sendEmail}
         </label>
-        <label className="toggle">
+        <label className="onb-label-inline">
           <input
             type="checkbox"
             checked={booking.sendSms}
@@ -244,87 +258,101 @@ export function FirstBookingCTA({
           />
           {copy.cta.toggles.sendSms}
         </label>
-      </div>
+      </Stack>
 
       {!smsAvailable && (
-        <div className="note" style={{ marginTop: 12 }}>
+        <p className="onb-note">
           {copy.cta.toggles.smsNote}
-        </div>
+        </p>
       )}
 
-      {errors.assignService && <span className="error">{errors.assignService}</span>}
-      {errors.salonId && <span className="error">{errors.salonId}</span>}
+      {errors.assignService && <p className="onb-cta-error">{errors.assignService}</p>}
+      {errors.salonId && <p className="onb-cta-error">{errors.salonId}</p>}
 
-      <div className="btn-row">
-        <button className="btn ghost" type="button" onClick={onBack}>
+      <Stack direction="row" gap="md" className="onb-cta-actions">
+        <Button variant="ghost" size="md" onClick={onBack}>
           {copy.cta.actions.back}
-        </button>
-        <button className="btn primary" type="button" onClick={onCreateBooking} disabled={bookingSaving}>
+        </Button>
+        <Button variant="primary" size="md" onClick={onCreateBooking} disabled={bookingSaving}>
           {bookingSaving ? copy.cta.actions.creating : copy.cta.actions.create}
-        </button>
-      </div>
+        </Button>
+      </Stack>
 
       {bookingError && (
-        <div className="banner" style={{ marginTop: 16 }}>
-          {bookingError}
-        </div>
+        <Card variant="outlined" className="onb-error-card onb-card-top-sm">
+          {bookingError.includes('time_not_available') || bookingError.includes('ikke længere tilgængelig') ? (
+            <Stack gap="sm">
+              <strong>{bookingError}</strong>
+              <p className="onb-note onb-note-tight">
+                {copy.cta.errors.slotUnavailable}
+              </p>
+              <Button variant="subtle" size="md" onClick={() => window.location.reload()}>
+                {copy.cta.actions.reloadSlots}
+              </Button>
+            </Stack>
+          ) : (
+            bookingError
+          )}
+        </Card>
       )}
       {bookingSuccess && (
-        <div className="banner success" style={{ marginTop: 16 }}>
-          {bookingSuccess}
-          {checkoutUrl ? (
-            <button
-              className="btn subtle"
-              type="button"
-              onClick={() => {
-                if (checkoutUrl) {
-                  window.open(checkoutUrl, '_blank', 'noopener');
-                }
-              }}
-            >
-              {copy.cta.actions.openCheckout}
-            </button>
-          ) : (
-            <button className="btn subtle" type="button">
-              {copy.cta.actions.viewCalendar}
-            </button>
-          )}
-        </div>
+        <Card variant="outlined" className="onb-cta-success onb-card-top-sm">
+          <Stack gap="sm" align="start">
+            <span>{bookingSuccess}</span>
+            {checkoutUrl ? (
+              <Button
+                variant="subtle"
+                size="md"
+                onClick={() => {
+                  if (checkoutUrl) {
+                    window.open(checkoutUrl, '_blank', 'noopener');
+                  }
+                }}
+              >
+                {copy.cta.actions.openCheckout}
+              </Button>
+            ) : (
+              <Button variant="subtle" size="md">
+                {copy.cta.actions.viewCalendar}
+              </Button>
+            )}
+          </Stack>
+        </Card>
       )}
 
       {lastBookingId && (
-        <div className="panel" style={{ marginTop: 16 }}>
+        <Card variant="outlined" className="onb-card-top-sm">
           <h4>{copy.cta.manage.title}</h4>
           <p>{copy.cta.manage.body}</p>
-          <div className="btn-row">
-            <button
-              className="btn ghost"
-              type="button"
-              onClick={() =>
-                confirmAction(
-                  { title: 'Annuller booking', body: 'Er du sikker på, at du vil annullere denne booking?' },
-                  onCancelBooking
-                )
-              }
-              disabled={manageBusy}
-            >
+          <Stack direction="row" gap="md">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  confirmAction(
+                    { title: copy.cta.manage.confirmCancelTitle, body: copy.cta.manage.confirmCancelBody },
+                    onCancelBooking
+                  )
+                }
+                disabled={manageBusy}
+              >
               {manageBusy ? copy.cta.actions.cancelling : copy.cta.actions.cancel}
-            </button>
-          </div>
-          <div className="note" style={{ marginTop: 12 }}>
+            </Button>
+          </Stack>
+          <p className="onb-note">
             {copy.cta.manage.rescheduleHint}
-          </div>
-          <div className="btn-row" style={{ flexWrap: 'wrap' }}>
+          </p>
+          <Stack direction="row" gap="sm" className="onb-wrap">
             {slots.slice(0, 10).map((slot) => (
-              <button
+              <Button
                 key={`reschedule-${slot.staffId}-${slot.startUtc}`}
-                className="btn subtle"
-                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() =>
                   confirmAction(
                     {
-                      title: 'Reschedule booking',
-                      body: `Flyt til ${slot.label}?`
+                      title: copy.cta.manage.confirmRescheduleTitle,
+                      body: copy.cta.manage.confirmRescheduleBody.replace('{slot}', slot.label)
                     },
                     () => onReschedule(slot)
                   )
@@ -332,26 +360,33 @@ export function FirstBookingCTA({
                 disabled={manageBusy}
               >
                 {copy.cta.actions.reschedule}: {slot.label}
-              </button>
+              </Button>
             ))}
-          </div>
-          {manageError && <div className="banner" style={{ marginTop: 12 }}>{manageError}</div>}
-          {manageSuccess && <div className="banner success" style={{ marginTop: 12 }}>{manageSuccess}</div>}
-        </div>
+          </Stack>
+          {manageError && (
+            <Card variant="outlined" className="onb-error-card onb-card-top-xs">
+              <p className="onb-error">{manageError}</p>
+            </Card>
+          )}
+          {manageSuccess && <p className="onb-note onb-card-top-xs">{manageSuccess}</p>}
+        </Card>
       )}
 
-      <div className="panel" style={{ marginTop: 24, borderColor: 'var(--accent)' }}>
-        <h4>Gå til Owner Console</h4>
-        <p>Du er klar til at bruge Owner Console. Afslut onboarding for at fortsætte.</p>
-        <button
-          className="btn primary"
-          type="button"
-          onClick={onFinishOnboarding}
-          disabled={finishingOnboarding}
+      <Card variant="outlined" className="onb-cta-success onb-card-top-lg">
+        <h4>{copy.cta.finish.title}</h4>
+        <p>{copy.cta.finish.body}</p>
+        <Button
+          variant="primary"
+          size="md"
+          onClick={() => {
+            console.log('[FirstBookingCTA] Finish onboarding button clicked');
+            onFinishOnboarding();
+          }}
+          isLoading={finishingOnboarding}
         >
-          {finishingOnboarding ? 'Afslutter...' : 'Afslut onboarding'}
-        </button>
-      </div>
+          {finishingOnboarding ? copy.cta.actions.finishingOnboarding : copy.cta.actions.finishOnboarding}
+        </Button>
+      </Card>
 
       <ConfirmDialog
         open={Boolean(confirmState)}
@@ -362,6 +397,6 @@ export function FirstBookingCTA({
         onConfirm={() => confirmState?.onConfirm()}
         onCancel={closeConfirm}
       />
-    </section>
+    </Card>
   );
 }

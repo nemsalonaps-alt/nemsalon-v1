@@ -56,6 +56,27 @@ import {
 } from '../../staff/repo/staff-time-off-repo.js';
 import { notificationsService } from '../../notifications/service/notifications-service.js';
 
+const DEFAULT_PENDING_TTL_MINUTES = 30;
+
+function computePendingExpiry(): string | null {
+  const ttlMinutes = env.BOOKING_PENDING_TTL_MINUTES ?? DEFAULT_PENDING_TTL_MINUTES;
+  if (!ttlMinutes || ttlMinutes <= 0) return null;
+  return new Date(Date.now() + ttlMinutes * 60_000).toISOString();
+}
+
+function isValidBookingTransition(from: BookingStatus, to: BookingStatus): boolean {
+  if (from === to) return true;
+  const transitions: Record<BookingStatus, BookingStatus[]> = {
+    pending: ['confirmed', 'cancelled'],
+    confirmed: ['in_progress', 'cancelled', 'no_show'],
+    in_progress: ['completed', 'cancelled'],
+    completed: [],
+    cancelled: [],
+    no_show: []
+  };
+  return transitions[from]?.includes(to) ?? false;
+}
+
 export type CreateBookingInput = {
   salonId: string;
   serviceId: string;
@@ -598,6 +619,7 @@ export const contentService = {
         startTime: input.startTime,
         endTime: computedEnd.toISOString(),
         status: 'pending',
+        expiresAt: computePendingExpiry(),
         idempotencyKey: input.idempotencyKey,
         notes: input.notes,
         totalAmount: service.price,
@@ -660,6 +682,7 @@ export const contentService = {
     toUtc?: string;
     staffId?: string;
     status?: BookingStatus;
+    limit?: number;
   }): Promise<
     Array<
       Booking & {
@@ -676,7 +699,8 @@ export const contentService = {
       fromUtc: input.fromUtc,
       toUtc: input.toUtc,
       staffId: input.staffId,
-      status: input.status
+      status: input.status,
+      limit: input.limit
     });
 
     const customerIds = Array.from(new Set(bookings.map((b) => b.customerId)));
@@ -720,6 +744,17 @@ export const contentService = {
   },
 
   async updateBookingStatus(bookingId: string, status: BookingStatus): Promise<Booking> {
+    const existing = await getBookingById(bookingId);
+    if (!existing) {
+      throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+    }
+    if (!isValidBookingTransition(existing.status, status)) {
+      throw httpError(
+        400,
+        'BOOKING_INVALID_STATUS_TRANSITION',
+        'error.booking.invalid_status_transition'
+      );
+    }
     const booking = await updateBookingStatusRepo(bookingId, status);
     if (!booking) {
       throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
@@ -728,6 +763,19 @@ export const contentService = {
   },
 
   async updateBooking(bookingId: string, input: { status?: BookingStatus; notes?: string | null }) {
+    if (input.status) {
+      const existing = await getBookingById(bookingId);
+      if (!existing) {
+        throw httpError(404, 'BOOKING_NOT_FOUND', 'error.booking.not_found');
+      }
+      if (!isValidBookingTransition(existing.status, input.status)) {
+        throw httpError(
+          400,
+          'BOOKING_INVALID_STATUS_TRANSITION',
+          'error.booking.invalid_status_transition'
+        );
+      }
+    }
     const booking = await updateBookingFieldsRepo({
       bookingId,
       status: input.status,

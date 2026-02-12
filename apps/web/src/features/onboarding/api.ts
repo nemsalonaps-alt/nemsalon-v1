@@ -15,7 +15,7 @@ const formatApiError = (message: string) => {
   const copy = getCopy();
   if (!isErrorKey(message)) return message;
   const errorMessage = (copy.apiErrors as Record<string, string>)[message];
-  return errorMessage ?? copy.apiErrors.generic;
+  return errorMessage || copy.apiErrors.generic;
 };
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -40,7 +40,16 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<A
   try {
     const copy = getCopy();
     const authHeaders = await getAuthHeaders();
-    const response = await fetch(`${apiBase}${path}`, {
+    const url = `${apiBase}${path}`;
+    const body = options.body as string | undefined;
+    
+    // Debug logging
+    console.log('[API Request]', path, {
+      method: options.method || 'GET',
+      body: body ? JSON.parse(body) : undefined
+    });
+    
+    const response = await fetch(url, {
       ...options,
       headers: {
         'content-type': 'application/json',
@@ -55,21 +64,28 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<A
 
     if (!response.ok) {
       let message = copy.errors.requestFailed(response.status);
+      let rawBody: unknown;
       if (isJson) {
         try {
-          const body = (await response.json()) as {
+          rawBody = await response.json();
+          console.error('[API Error Response]', path, response.status, rawBody);
+          const body = rawBody as {
             message?: string;
             errorKey?: string;
             code?: string;
           };
           const key = body?.message ?? body?.errorKey ?? (body?.code ? `error.${body.code.toLowerCase()}` : undefined);
-          if (key) message = formatApiError(key);
+          if (key) {
+            const validKey = typeof key === 'string' ? key : String(key);
+            message = formatApiError(validKey);
+          }
         } catch {
           // ignore parse errors
         }
       } else {
         try {
           const text = await response.text();
+          console.error('[API Error Response]', path, response.status, text.slice(0, 200));
           if (text) message = `Request failed (${response.status}). Non-JSON response: ${text.slice(0, 120)}`;
         } catch {
           // ignore parse errors
@@ -83,10 +99,10 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<A
     }
 
     if (!isJson) {
-      const text = await response.text();
+      void (await response.text());
       return {
         ok: false,
-        error: `Expected JSON but got "${contentType || 'unknown'}". ${text.slice(0, 120)}`,
+        error: copy.apiErrors.nonJsonResponse,
         status: response.status
       };
     }
@@ -94,12 +110,13 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<A
     const data = (await response.json()) as T;
     return { ok: true, data };
   } catch (error) {
+    console.error('[API Network Error]', path, error);
     return {
       ok: false,
       error:
         error instanceof Error
-          ? `Network error: ${error.message}`
-          : 'Network error: request failed.',
+          ? copy.apiErrors.networkError.replace('{message}', error.message)
+          : copy.apiErrors.networkErrorFallback,
       status: 0
     };
   }
@@ -202,6 +219,25 @@ export async function setStaffWorkingHours(staffId: string, weekly: WeeklyHours[
   });
 }
 
+export type StripeConnectStatus = {
+  connected: boolean;
+  stripeAccountId: string | null;
+  detailsSubmitted: boolean;
+  chargesEnabled: boolean;
+  payoutsEnabled: boolean;
+  onboardingCompletedAt: string | null;
+};
+
+export async function startStripeConnect() {
+  return apiRequest<{ url: string; expiresAt: string }>(`/v1/payments/connect/start`, {
+    method: 'POST'
+  });
+}
+
+export async function getStripeConnectStatus() {
+  return apiRequest<StripeConnectStatus>(`/v1/payments/connect/status`);
+}
+
 export async function createBooking(payload: {
   staffId: string;
   serviceId: string;
@@ -258,7 +294,8 @@ export async function rescheduleBooking(bookingId: string, payload: { staffId: s
 
 export async function activateSalon(salonId: string) {
   return apiRequest<{ id: string; status: 'active' }>(`/v1/salons/${salonId}/activate`, {
-    method: 'POST'
+    method: 'POST',
+    body: JSON.stringify({})
   });
 }
 

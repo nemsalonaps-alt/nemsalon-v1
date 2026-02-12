@@ -46,14 +46,14 @@ export function buildBookingManageUrl(input: {
 }
 
 export function getSalonSlugFromPath(path: string): string | null {
-  const match = path.match(/^\/book\/([^\/]+)/);
+  const match = path.match(/^\/book\/([^/]+)/);
   return match?.[1] ?? null;
 }
 
 export function getSalonSlugFromHostname(hostname: string): string | null {
   const parts = hostname.split('.');
   if (parts.length >= 3 && parts[0] !== 'www') {
-    return parts[0];
+    return parts[0] ?? null;
   }
   return null;
 }

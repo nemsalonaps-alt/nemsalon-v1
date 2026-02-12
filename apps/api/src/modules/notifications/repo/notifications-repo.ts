@@ -142,6 +142,51 @@ export async function markOutboxFailed(input: {
   }
 }
 
+export async function upsertWorkerHeartbeat(input: {
+  workerName: string;
+  details?: Record<string, unknown> | null;
+}): Promise<void> {
+  const client = getSupabaseClient();
+  const { error } = await client
+    .from('worker_heartbeats')
+    .upsert(
+      {
+        worker_name: input.workerName,
+        last_seen_at: new Date().toISOString(),
+        details: input.details ?? null
+      },
+      { onConflict: 'worker_name' }
+    );
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+}
+
+export async function getWorkerHeartbeat(workerName: string): Promise<{
+  workerName: string;
+  lastSeenAt: string;
+  details?: Record<string, unknown> | null;
+} | null> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('worker_heartbeats')
+    .select('*')
+    .eq('worker_name', workerName)
+    .maybeSingle();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  if (!data) return null;
+  return {
+    workerName: data.worker_name as string,
+    lastSeenAt: data.last_seen_at as string,
+    details: (data.details as Record<string, unknown> | null) ?? null
+  };
+}
+
 function mapOutboxRow(row: Record<string, unknown>): NotificationOutboxEntry {
   return {
     id: row.id as string,

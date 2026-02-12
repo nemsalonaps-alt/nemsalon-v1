@@ -8,7 +8,10 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "worker:notifications": "tsx src/modules/notifications/worker/notifications-worker.ts",
+    "worker:booking-expiry": "tsx src/modules/bookings/worker/booking-expiry-worker.ts",
     "test": "vitest run --config vitest.config.ts",
+    "test:contract": "vitest run --config vitest.config.ts -t contract",
+    "test:perf": "vitest run --config vitest.config.ts -t perf",
     "lint": "eslint src"
   },
   "dependencies": {

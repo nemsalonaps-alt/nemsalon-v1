@@ -4,6 +4,7 @@ export type AuthUser = {
   fullName?: string | null;
   phone?: string | null;
   primarySalonId?: string | null;
+  role?: 'owner' | 'admin' | 'staff' | 'customer' | null;
 };
 
 export type Membership = {
@@ -21,6 +22,13 @@ export type Membership = {
     currency: string;
     timezone: string;
     cancellationWindowMinutes: number;
+    stripeAccountId?: string | null;
+    stripeDetailsSubmitted?: boolean;
+    stripeChargesEnabled?: boolean;
+    stripePayoutsEnabled?: boolean;
+    stripeOnboardingCompletedAt?: string | null;
+    stripeConnectState?: string | null;
+    stripeConnectStateExpiresAt?: string | null;
   };
 };
 
@@ -29,4 +37,5 @@ export type AuthMeResponse = {
   memberships: Membership[];
   primarySalonId?: string | null;
   salon?: Membership['salon'] | null;
+  isPlatformAdmin?: boolean;
 };

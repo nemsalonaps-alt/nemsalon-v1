@@ -25,6 +25,16 @@ export async function createCustomer(input: CustomerInsert): Promise<Customer> {
     .single();
 
   if (error) {
+    if (error.code === '23505') {
+      const existing = await findCustomerByContact({
+        salonId: input.salonId,
+        email: input.email ?? null,
+        phone: input.phone ?? null
+      });
+      if (existing) {
+        return existing;
+      }
+    }
     throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
   }
 

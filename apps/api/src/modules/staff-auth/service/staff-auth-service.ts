@@ -1,24 +1,18 @@
-import { staffAuthRepo } from '../repo/staff-auth-repo.js';
-import { staffSessionRepo, hashToken } from '../repo/staff-session-repo.js';
+import { randomUUID } from 'crypto';
+import { env } from '../../../config/env.js';
+import { httpError } from '../../../server/http-error.js';
+import { createStaffProfile, getStaffById, updateStaffRole } from '../../staff/repo/staff-repo.js';
 import { contentService } from '../../content/service/content-service.js';
+import { getSalonById } from '../../salons/repo/salons-repo.js';
 import { emailService } from '../../notifications/service/email-service.js';
-import bcryptjs from 'bcryptjs';
-import crypto from 'crypto';
+import { upsertStaffInvite, listPendingInvites } from '../repo/staff-auth-repo.js';
 
-// Use bcrypt with 10 rounds for PIN hashing
-const SALT_ROUNDS = 10;
-const SESSION_DURATION_HOURS = 24;
-
-async function hashPin(pin: string): Promise<string> {
-  return bcryptjs.hash(pin, SALT_ROUNDS);
-}
-
-async function verifyPin(pin: string, hash: string): Promise<boolean> {
-  return bcryptjs.compare(pin, hash);
-}
-
-function generateToken(): string {
-  return crypto.randomBytes(32).toString('hex');
+function buildInviteUrl(actionLink?: string | null, inviteToken?: string | null) {
+  if (actionLink) return actionLink;
+  if (env.WEB_URL && inviteToken) {
+    return `${env.WEB_URL.replace(/\/$/, '')}/invite/staff?token=${inviteToken}`;
+  }
+  return 'missing-invite-url';
 }
 
 export const staffAuthService = {
@@ -26,147 +20,72 @@ export const staffAuthService = {
     salonId: string;
     email: string;
     name: string;
-    role: 'staff' | 'admin';
-  }) {
-    // Create staff profile first
-    const staffProfile = await contentService.createStaff({
+    role?: 'staff' | 'admin';
+    staffId?: string;
+  }): Promise<{ staffId: string; inviteToken: string; actionLink?: string | null }> {
+    const email = input.email.trim().toLowerCase();
+    const role = input.role ?? 'staff';
+    let staffId = input.staffId ?? null;
+
+    if (staffId) {
+      const staff = await getStaffById(staffId);
+      if (!staff || staff.salonId !== input.salonId) {
+        throw httpError(404, 'STAFF_NOT_FOUND', 'Staff member not found');
+      }
+      if (staff.role !== role) {
+        await updateStaffRole({ staffId: staff.id, salonId: input.salonId, role });
+      }
+    } else {
+      const created = await createStaffProfile({
+        salonId: input.salonId,
+        name: input.name,
+        role,
+        active: true,
+        email
+      });
+      staffId = created.id;
+    }
+
+    if (!staffId) {
+      throw httpError(500, 'STAFF_INVITE_FAILED', 'Unable to resolve staff profile.');
+    }
+
+    const invite = await contentService.inviteStaff({
       salonId: input.salonId,
-      name: input.name,
-      role: input.role,
-      active: true
+      staffId,
+      email,
+      role
     });
 
-    // Generate invite token
-    const inviteToken = generateToken();
+    const salon = await getSalonById(input.salonId);
+    const salonName = salon?.name ?? 'Salon';
 
-    // Create staff auth record
-    await staffAuthRepo.createStaffInvite({
-      staffId: staffProfile.id,
+    const inviteToken = randomUUID();
+    const inviteExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    await upsertStaffInvite({
+      staffId,
       salonId: input.salonId,
-      email: input.email,
-      inviteToken
-    });
-
-    // Send invitation email
-    await emailService.sendStaffInvite({
-      email: input.email,
-      name: input.name,
+      invitedEmail: email,
       inviteToken,
-      salonName: 'Your Salon' // TODO: Get actual salon name
+      inviteExpiresAt
+    });
+
+    await emailService.sendStaffInvite({
+      email,
+      name: input.name,
+      salonName,
+      inviteUrl: buildInviteUrl(invite.actionLink, inviteToken)
     });
 
     return {
-      success: true,
-      staffId: staffProfile.id,
-      inviteToken
+      staffId,
+      inviteToken,
+      actionLink: invite.actionLink
     };
   },
 
-  async acceptInvite(input: { token: string; pin: string }) {
-    const authRecord = await staffAuthRepo.getStaffAuthByInviteToken(input.token);
-    
-    if (!authRecord) {
-      return { success: false, error: 'Invalid invitation token' };
-    }
-
-    // Check if invite is expired
-    const expiresAt = new Date(authRecord.invite_expires_at);
-    if (expiresAt < new Date()) {
-      return { success: false, error: 'Invitation has expired' };
-    }
-
-    // Check if PIN is already set (invite already used)
-    if (authRecord.pin_hash) {
-      return { success: false, error: 'Invitation already used' };
-    }
-
-    // Hash and set PIN
-    const pinHash = await hashPin(input.pin);
-    await staffAuthRepo.setPin(authRecord.staff_id, pinHash);
-
-    return { success: true, staffId: authRecord.staff_id };
-  },
-
-  async loginWithPin(input: { email: string; pin: string }) {
-    const authRecord = await staffAuthRepo.getStaffAuthByEmail(input.email);
-    
-    if (!authRecord) {
-      return { success: false, error: 'Invalid email or PIN' };
-    }
-
-    // Check if account is locked
-    if (authRecord.locked_until && new Date(authRecord.locked_until) > new Date()) {
-      return { success: false, error: 'Account is locked. Try again later.' };
-    }
-
-    // Check if PIN is set
-    if (!authRecord.pin_hash) {
-      return { success: false, error: 'PIN not set. Please accept your invitation first.' };
-    }
-
-    // Verify PIN
-    const pinValid = await verifyPin(input.pin, authRecord.pin_hash);
-    
-    if (!pinValid) {
-      await staffAuthRepo.recordLogin(authRecord.staff_id, false);
-      return { success: false, error: 'Invalid email or PIN' };
-    }
-
-    // Record successful login
-    await staffAuthRepo.recordLogin(authRecord.staff_id, true);
-
-    // Generate simple token and create session
-    const token = generateToken();
-    const tokenHash = hashToken(token);
-    
-    await staffSessionRepo.createSession({
-      staffId: authRecord.staff_id,
-      salonId: authRecord.salon_id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + SESSION_DURATION_HOURS * 60 * 60 * 1000)
-    });
-
-    return {
-      success: true,
-      staffId: authRecord.staff_id,
-      salonId: authRecord.salon_id,
-      token  // Return plain token once
-    };
-  },
-
-  async resetPin(input: { staffId: string; pin: string }) {
-    const pinHash = await hashPin(input.pin);
-    await staffAuthRepo.setPin(input.staffId, pinHash);
-  },
-
-  async validateToken(token: string) {
-    const tokenHash = hashToken(token);
-    const session = await staffSessionRepo.getSessionByToken(tokenHash);
-    
-    if (!session) {
-      return { success: false, error: 'Invalid or expired session' };
-    }
-
-    return {
-      success: true,
-      staffId: session.staff_id,
-      salonId: session.salon_id,
-      sessionId: session.id
-    };
-  },
-
-  async logout(token: string) {
-    const tokenHash = hashToken(token);
-    const session = await staffSessionRepo.getSessionByToken(tokenHash);
-    
-    if (session) {
-      await staffSessionRepo.deleteSession(session.id);
-    }
-    
-    return { success: true };
-  },
-
-  async getStaffForUser(input: { salonId: string; userId: string }) {
-    return contentService.getStaffForUser(input);
+  async listPendingInvitations(salonId: string) {
+    return listPendingInvites(salonId);
   }
 };

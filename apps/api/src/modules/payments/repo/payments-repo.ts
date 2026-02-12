@@ -23,7 +23,7 @@ export async function createPayment(input: PaymentInsert): Promise<Payment> {
       amount: input.amount,
       currency: input.currency,
       status: input.status,
-      idempotency_key: input.idempotencyKey ?? null
+      idempotency_key: input.idempotencyKey ?? null,
     })
     .select('*')
     .single();
@@ -40,14 +40,14 @@ export async function createPayment(input: PaymentInsert): Promise<Payment> {
 
 export async function updatePaymentProviderReference(
   paymentId: string,
-  payload: { providerReference: string; providerIntentId?: string | null }
+  payload: { sessionId: string; paymentIntentId?: string | null },
 ): Promise<Payment> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('payments')
     .update({
-      provider_reference: payload.providerReference,
-      provider_intent_id: payload.providerIntentId ?? null
+      provider_reference: payload.sessionId,
+      provider_intent_id: payload.paymentIntentId ?? null,
     })
     .eq('id', paymentId)
     .select('*')
@@ -63,21 +63,21 @@ export async function updatePaymentProviderReference(
 export async function markPaymentPaid(
   paymentId: string,
   payload: {
-    providerReference?: string;
-    providerIntentId?: string;
+    sessionId?: string;
+    paymentIntentId?: string;
     providerEventId?: string;
     rawEvent?: Record<string, unknown>;
-  }
+  },
 ): Promise<Payment | null> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('payments')
     .update({
       status: 'succeeded',
-      provider_reference: payload.providerReference,
-      provider_intent_id: payload.providerIntentId,
+      provider_reference: payload.sessionId,
+      provider_intent_id: payload.paymentIntentId,
       provider_event_id: payload.providerEventId,
-      raw_event: payload.rawEvent
+      raw_event: payload.rawEvent,
     })
     .eq('id', paymentId)
     .neq('status', 'succeeded')
@@ -93,7 +93,11 @@ export async function markPaymentPaid(
 
 export async function getPaymentById(paymentId: string): Promise<Payment | null> {
   const client = getSupabaseClient();
-  const { data, error } = await client.from('payments').select('*').eq('id', paymentId).maybeSingle();
+  const { data, error } = await client
+    .from('payments')
+    .select('*')
+    .eq('id', paymentId)
+    .maybeSingle();
 
   if (error) {
     throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
@@ -104,7 +108,7 @@ export async function getPaymentById(paymentId: string): Promise<Payment | null>
 
 export async function getPaymentByProviderReference(
   provider: Payment['provider'],
-  providerReference: string
+  providerReference: string,
 ): Promise<Payment | null> {
   const client = getSupabaseClient();
   const { data, error } = await client
@@ -123,7 +127,7 @@ export async function getPaymentByProviderReference(
 
 export async function getPaymentByProviderIntentId(
   provider: Payment['provider'],
-  providerIntentId: string
+  providerIntentId: string,
 ): Promise<Payment | null> {
   const client = getSupabaseClient();
   const { data, error } = await client
@@ -160,7 +164,7 @@ export async function getActivePaymentForBooking(bookingId: string): Promise<Pay
 
 export async function getPaymentByIdempotencyKey(
   bookingId: string,
-  idempotencyKey: string
+  idempotencyKey: string,
 ): Promise<Payment | null> {
   const client = getSupabaseClient();
   const { data, error } = await client
@@ -199,21 +203,21 @@ export async function updatePaymentStatus(
   paymentId: string,
   status: PaymentStatus,
   payload?: {
-    providerReference?: string | null;
-    providerIntentId?: string | null;
+    sessionId?: string | null;
+    paymentIntentId?: string | null;
     providerEventId?: string | null;
     rawEvent?: Record<string, unknown> | null;
-  }
+  },
 ): Promise<Payment | null> {
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('payments')
     .update({
       status,
-      provider_reference: payload?.providerReference ?? undefined,
-      provider_intent_id: payload?.providerIntentId ?? undefined,
+      provider_reference: payload?.sessionId ?? undefined,
+      provider_intent_id: payload?.paymentIntentId ?? undefined,
       provider_event_id: payload?.providerEventId ?? undefined,
-      raw_event: payload?.rawEvent ?? undefined
+      raw_event: payload?.rawEvent ?? undefined,
     })
     .eq('id', paymentId)
     .neq('status', status)
@@ -236,9 +240,9 @@ function mapPaymentRow(row: Record<string, unknown>): Payment {
     status: row.status as Payment['status'],
     amount: Number(row.amount),
     currency: row.currency as string,
-    providerReference: row.provider_reference as string | null,
-    providerIntentId: row.provider_intent_id as string | null,
+    sessionId: row.provider_reference as string | null,
+    paymentIntentId: row.provider_intent_id as string | null,
     providerEventId: row.provider_event_id as string | null,
-    idempotencyKey: row.idempotency_key as string | null
+    idempotencyKey: row.idempotency_key as string | null,
   };
 }

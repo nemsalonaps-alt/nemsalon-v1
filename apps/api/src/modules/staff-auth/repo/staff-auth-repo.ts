@@ -1,110 +1,82 @@
 import { getSupabaseClient } from '../../../server/db.js';
 import { httpError } from '../../../server/http-error.js';
 
-export const staffAuthRepo = {
-  async createStaffInvite(input: {
-    staffId: string;
-    salonId: string;
-    email: string;
-    inviteToken: string;
-  }) {
-    const client = getSupabaseClient();
-    const { data, error } = await client
-      .from('staff_auth')
-      .insert({
-        staff_id: input.staffId,
-        salon_id: input.salonId,
-        invited_email: input.email,
-        invite_token: input.inviteToken,
-        invite_expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-      })
-      .select()
-      .single();
-
-    if (error) {
-      throw httpError(500, 'DATABASE_ERROR', error.message);
-    }
-
-    return data;
-  },
-
-  async getStaffAuthByInviteToken(token: string) {
-    const client = getSupabaseClient();
-    const { data, error } = await client
-      .from('staff_auth')
-      .select('*, staff_profiles(*)')
-      .eq('invite_token', token)
-      .single();
-
-    if (error || !data) {
-      return null;
-    }
-
-    return data;
-  },
-
-  async getStaffAuthByEmail(email: string) {
-    const client = getSupabaseClient();
-    const { data, error } = await client
-      .from('staff_auth')
-      .select('*, staff_profiles(*)')
-      .eq('invited_email', email.toLowerCase())
-      .eq('active', true)
-      .single();
-
-    if (error || !data) {
-      return null;
-    }
-
-    return data;
-  },
-
-  async setPin(staffId: string, pinHash: string) {
-    const client = getSupabaseClient();
-    const { error } = await client
-      .from('staff_auth')
-      .update({
-        pin_hash: pinHash,
-        pin_set_at: new Date().toISOString()
-      })
-      .eq('staff_id', staffId);
-
-    if (error) {
-      throw httpError(500, 'DATABASE_ERROR', error.message);
-    }
-  },
-
-  async recordLogin(staffId: string, success: boolean) {
-    const client = getSupabaseClient();
-    
-    if (success) {
-      await client
-        .from('staff_auth')
-        .update({
-          last_login_at: new Date().toISOString(),
-          failed_login_attempts: 0,
-          locked_until: null
-        })
-        .eq('staff_id', staffId);
-    } else {
-      const { data } = await client
-        .from('staff_auth')
-        .select('failed_login_attempts')
-        .eq('staff_id', staffId)
-        .single();
-      
-      const attempts = (data?.failed_login_attempts ?? 0) + 1;
-      const lockedUntil = attempts >= 5 
-        ? new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 min lockout
-        : null;
-      
-      await client
-        .from('staff_auth')
-        .update({
-          failed_login_attempts: attempts,
-          locked_until: lockedUntil
-        })
-        .eq('staff_id', staffId);
-    }
-  }
+export type StaffInvite = {
+  id: string;
+  staffId: string;
+  salonId: string;
+  invitedEmail: string;
+  inviteToken: string;
+  inviteExpiresAt: string;
+  createdAt: string;
+  staffName?: string | null;
+  staffRole?: string | null;
 };
+
+export async function upsertStaffInvite(input: {
+  staffId: string;
+  salonId: string;
+  invitedEmail: string;
+  inviteToken: string;
+  inviteExpiresAt: string;
+}): Promise<StaffInvite> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('staff_auth')
+    .upsert({
+      staff_id: input.staffId,
+      salon_id: input.salonId,
+      invited_email: input.invitedEmail,
+      invite_token: input.inviteToken,
+      invite_expires_at: input.inviteExpiresAt,
+      active: true,
+    })
+    .select(
+      'id, staff_id, salon_id, invited_email, invite_token, invite_expires_at, created_at, staff_profiles(display_name, role)',
+    )
+    .single();
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return {
+    id: data.id as string,
+    staffId: data.staff_id as string,
+    salonId: data.salon_id as string,
+    invitedEmail: data.invited_email as string,
+    inviteToken: data.invite_token as string,
+    inviteExpiresAt: data.invite_expires_at as string,
+    createdAt: data.created_at as string,
+    staffName: (data.staff_profiles as { display_name?: string } | undefined)?.display_name ?? null,
+    staffRole: (data.staff_profiles as { role?: string } | undefined)?.role ?? null,
+  };
+}
+
+export async function listPendingInvites(salonId: string): Promise<StaffInvite[]> {
+  const client = getSupabaseClient();
+  const { data, error } = await client
+    .from('staff_auth')
+    .select(
+      'id, staff_id, salon_id, invited_email, invite_token, invite_expires_at, created_at, staff_profiles(display_name, role)',
+    )
+    .eq('salon_id', salonId)
+    .gt('invite_expires_at', new Date().toISOString())
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map((row) => ({
+    id: row.id as string,
+    staffId: row.staff_id as string,
+    salonId: row.salon_id as string,
+    invitedEmail: row.invited_email as string,
+    inviteToken: row.invite_token as string,
+    inviteExpiresAt: row.invite_expires_at as string,
+    createdAt: row.created_at as string,
+    staffName: (row.staff_profiles as { display_name?: string } | undefined)?.display_name ?? null,
+    staffRole: (row.staff_profiles as { role?: string } | undefined)?.role ?? null,
+  }));
+}

@@ -10,6 +10,7 @@ import { env } from '../config/env.js';
 import { checkSupabaseConnection, checkSupabaseMigrations } from './db.js';
 import { getRequestContext } from './request-context.js';
 import { createErrorEvent } from '../modules/observability/repo/error-events-repo.js';
+import { getWorkerHeartbeat } from '../modules/notifications/repo/notifications-repo.js';
 
 export function buildApp() {
   const app = fastify({
@@ -82,11 +83,40 @@ export function buildApp() {
       });
       return;
     }
+    const notificationsEnabled = env.FEATURE_NOTIFICATIONS !== 'false';
+    const requireNotificationsWorker =
+      env.NOTIFICATIONS_WORKER_REQUIRED === 'true' ||
+      (env.NODE_ENV === 'production' && env.NOTIFICATIONS_WORKER_REQUIRED !== 'false');
+    if (notificationsEnabled && requireNotificationsWorker) {
+      const heartbeat = await getWorkerHeartbeat('notifications');
+      const ttlSeconds = env.WORKER_HEARTBEAT_TTL_SECONDS ?? 60;
+      const lastSeen = heartbeat?.lastSeenAt ? new Date(heartbeat.lastSeenAt).getTime() : 0;
+      const stale = !lastSeen || Date.now() - lastSeen > ttlSeconds * 1000;
+      if (stale) {
+        reply.code(503).send({
+          status: 'not_ready',
+          checks: {
+            connection,
+            migrations,
+            notificationsWorker: {
+              ok: false,
+              message: 'Notifications worker heartbeat stale or missing',
+              lastSeenAt: heartbeat?.lastSeenAt ?? null
+            }
+          }
+        });
+        return;
+      }
+    }
     reply.code(200).send({
       status: 'ready',
       checks: {
         connection,
-        migrations
+        migrations,
+        notificationsWorker:
+          notificationsEnabled && requireNotificationsWorker
+            ? { ok: true }
+            : { ok: true, skipped: true }
       }
     });
   });
@@ -118,8 +148,12 @@ export function buildApp() {
   });
 
   // Register cookie plugin for secure httpOnly cookies
+  const cookieSecret = env.COOKIE_SECRET ?? (env.NODE_ENV === 'production' ? undefined : `dev-${randomUUID()}`);
+  if (!cookieSecret) {
+    throw new Error('COOKIE_SECRET must be set in production environment');
+  }
   app.register(cookie, {
-    secret: env.COOKIE_SECRET || 'dev-secret-change-in-production',
+    secret: cookieSecret,
     parseOptions: {}
   });
 

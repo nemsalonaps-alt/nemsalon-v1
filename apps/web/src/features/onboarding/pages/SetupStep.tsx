@@ -9,6 +9,7 @@ import { AssignServices } from '../components/AssignServices';
 import { ServiceForm as ServiceFormComponent } from '../components/ServiceForm';
 import { StaffForm } from '../components/StaffForm';
 import { getCopy } from '../copy';
+import { Card, Stack, Button } from '@nemsalon/ui';
 
 type SetupStepProps = {
   staff: StaffFormType;
@@ -67,18 +68,18 @@ export function SetupStep({
       />
       <AssignServices assignService={assignService} error={errors.assignService} onToggle={onAssignChange} />
 
-      <div className="btn-row">
-        <button className="btn ghost" type="button" onClick={onBack}>
+      <Stack direction="row" gap="md" className="onb-actions">
+        <Button variant="ghost" onClick={onBack}>
           {copy.staff.actions.back}
-        </button>
-        <button className="btn primary" type="button" onClick={onContinue} disabled={saving}>
+        </Button>
+        <Button variant="primary" onClick={onContinue} disabled={saving}>
           {saving ? copy.staff.actions.saving : copy.staff.actions.continue}
-        </button>
-      </div>
+        </Button>
+      </Stack>
       {apiError && (
-        <div className="banner" style={{ marginTop: 16 }}>
-          {apiError}
-        </div>
+        <Card variant="outlined" className="onb-error-card onb-error-card-soft onb-card-top-sm">
+          <p className="onb-error onb-note-tight">{apiError}</p>
+        </Card>
       )}
     </>
   );

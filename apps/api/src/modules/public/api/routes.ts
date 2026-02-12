@@ -27,6 +27,8 @@ const publicBookingSchema = z.object({
     name: z.string().min(1),
     email: z.string().email().optional(),
     phone: z.string().min(3).optional()
+  }).refine((value) => Boolean(value.email || value.phone), {
+    message: 'Provide email or phone.'
   })
 });
 

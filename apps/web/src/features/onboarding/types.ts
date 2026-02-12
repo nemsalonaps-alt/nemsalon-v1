@@ -1,15 +1,16 @@
-export type GateState = 'checking' | 'needs-onboarding' | 'has-salon' | 'needs-login' | 'error';
+import type { SalonType } from '@nemsalon/shared';
+
+export type GateState =
+  | 'checking'
+  | 'recovering'
+  | 'needs-onboarding'
+  | 'has-salon'
+  | 'needs-login'
+  | 'error';
 export type StepId = 'salon' | 'staff' | 'payments' | 'cta';
-export type DayId = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
-export type SalonType =
-  | 'hair_salon'
-  | 'nail_salon'
-  | 'wellness_center'
-  | 'massage_clinic'
-  | 'tattoo_studio'
-  | 'barbershop'
-  | 'spa_wellness'
-  | 'cosmetic_clinic';
+
+// Re-export shared types to maintain backwards compatibility
+export type { DayId, SalonType, WeeklyHours, AuthMeResponse } from '@nemsalon/shared';
 
 export type AvailabilitySlot = {
   startUtc: string;
@@ -27,13 +28,6 @@ export type AvailabilityResponse = {
     staffId?: string;
     timezone: string;
   };
-};
-
-export type WeeklyHours = {
-  day: DayId;
-  enabled: boolean;
-  start: string;
-  end: string;
 };
 
 export type SalonForm = {
@@ -69,41 +63,4 @@ export type BookingForm = {
   sendSms: boolean;
 };
 
-export type AuthMeResponse = {
-  user: {
-    id: string;
-    email?: string | null;
-    fullName?: string | null;
-    phone?: string | null;
-    primarySalonId?: string | null;
-  };
-  memberships: Array<{
-    id: string;
-    salonId: string;
-    role: 'owner' | 'admin' | 'staff';
-    active: boolean;
-    salon?: {
-      id: string;
-      name?: string | null;
-      slug?: string | null;
-      status?: 'draft' | 'active';
-      locale?: string | null;
-      salonType?: SalonType | null;
-      currency?: string | null;
-      timezone?: string | null;
-      cancellationWindowMinutes?: number | null;
-    };
-  }>;
-  primarySalonId?: string | null;
-  salon?: {
-    id: string;
-    name?: string | null;
-    slug?: string | null;
-    status?: 'draft' | 'active';
-    locale?: string | null;
-    salonType?: SalonType | null;
-    currency?: string | null;
-    timezone?: string | null;
-    cancellationWindowMinutes?: number | null;
-  } | null;
-};
+// AuthMeResponse is re-exported from @nemsalon/shared above

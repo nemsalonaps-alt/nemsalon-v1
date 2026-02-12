@@ -1,46 +1,12 @@
-export type SalonSummary = {
-  id: string;
-  name: string;
-  slug?: string | null;
-  status: 'draft' | 'active';
-  timezone: string;
-  locale: string;
-  salonType?: string | null;
-  currency: string;
-  cancellationWindowMinutes: number;
-};
+import type { AuthMeResponse as SharedAuthMeResponse } from '@nemsalon/shared';
 
-export type AuthMeResponse = {
-  user: {
-    id: string;
-    email?: string | null;
-    fullName?: string | null;
-    phone?: string | null;
-    primarySalonId?: string | null;
-  };
-  memberships: Array<{
-    id: string;
-    salonId: string;
-    role: 'owner' | 'admin' | 'staff';
-    active: boolean;
-    salon?: {
-      id: string;
-      name?: string | null;
-      slug?: string | null;
-      status?: 'draft' | 'active';
-      locale?: string | null;
-      salonType?: string | null;
-      currency?: string | null;
-      timezone?: string | null;
-      cancellationWindowMinutes?: number | null;
-    };
-  }>;
-  salon?: SalonSummary | null;
-  primarySalonId?: string | null;
-};
+export type { SalonSummary, SalonType, DayId, WeeklyHours } from '@nemsalon/shared';
+
+export type AuthMeResponse = SharedAuthMeResponse;
 
 export type StaffProfile = {
   id: string;
+  salonId: string;
   name: string;
   role: 'owner' | 'admin' | 'staff';
   active: boolean;
@@ -61,10 +27,11 @@ export type Service = {
   id: string;
   name: string;
   durationMinutes: number;
-  bufferMinutes: number;
+  bufferMinutes?: number;
   price: number;
   currency: string;
-  active: boolean;
+  active?: boolean;
+  salonId?: string;
 };
 
 export type BookingSummary = {
@@ -106,26 +73,26 @@ export type PlatformSalon = {
 
 export type PlatformAuditEntry = {
   id: string;
-  salon_id?: string | null;
-  actor_user_id?: string | null;
+  salonId?: string | null;
+  actorUserId?: string | null;
   action: string;
-  entity_type?: string | null;
-  entity_id?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
   metadata?: Record<string, unknown> | null;
-  created_at: string;
+  createdAt: string;
 };
 
 export type PlatformPayment = {
   id: string;
-  salon_id: string;
-  booking_id: string;
+  salonId: string;
+  bookingId: string;
   provider: string;
   status: string;
   amount: number;
   currency: string;
-  provider_reference?: string | null;
-  provider_event_id?: string | null;
-  created_at: string;
+  providerReference?: string | null;
+  providerEventId?: string | null;
+  createdAt: string;
 };
 
 export type AvailabilityResponse = {
@@ -140,16 +107,13 @@ export type AvailabilityResponse = {
   };
 };
 
-export type BusinessHoursEntry = {
-  day: string;
-  startTime: string;
-  endTime: string;
-  enabled: boolean;
-};
+export type { BusinessHoursEntry } from '@nemsalon/shared';
 
 export type StaffTimeOff = {
   id: string;
   staffId: string;
+  startUtc?: string;
+  endUtc?: string;
   startTime: string;
   endTime: string;
   reason?: string | null;
@@ -176,4 +140,39 @@ export type DashboardKPIs = {
 export type DashboardData = {
   todayBookings: BookingSummary[];
   kpis: DashboardKPIs;
+};
+
+export type PlatformUser = {
+  id: string;
+  email: string | null;
+  fullName: string | null;
+  role: 'owner' | 'admin' | 'staff' | 'customer' | null;
+  salonId: string | null;
+  salonName: string | null;
+  salonStatus: string | null;
+  createdAt: string;
+};
+
+export type UsersListResponse = {
+  data: PlatformUser[];
+  meta: {
+    total: number;
+    limit: number;
+    hasMore: boolean;
+    nextOffset: number | null;
+  };
+};
+
+export type ImpersonationUser = {
+  id: string;
+  fullName: string | null;
+  email: string | null;
+  role: string | null;
+  salonName?: string | null;
+};
+
+export type ImpersonationStatusResponse = {
+  isImpersonating: boolean;
+  impersonator: ImpersonationUser | null;
+  impersonatedUser?: ImpersonationUser | null;
 };

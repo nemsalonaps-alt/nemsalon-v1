@@ -3,12 +3,16 @@ import { BookingFlow } from './routes/BookingFlow';
 import { PublicBookingConfirmation as Confirmation } from './routes/Confirmation';
 import { PublicBookingManage as ManageBooking } from './routes/ManageBooking';
 import { getSalonSlugFromHostname, getSalonSlugFromPath } from '../../lib/public-url';
+import { Card, Stack } from '@nemsalon/ui';
+import { getCopy } from '../../i18n';
+import './public-booking.css';
 
 export function PublicBookingApp() {
+  const copy = getCopy();
+  const c = copy.publicBooking;
   const [salonSlug, setSalonSlug] = useState<string | null>(null);
   const [view, setView] = useState<'booking' | 'confirmation' | 'manage'>('booking');
   const [bookingId, setBookingId] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     // Parse URL to determine view and params
@@ -25,26 +29,22 @@ export function PublicBookingApp() {
     }
 
     // Check for confirmation view
-    const pathMatch = path.match(/\/book\/(?:[^/]+\/)?confirm/);
-    if (pathMatch) {
-      const bid = search.get('bookingId');
-      const tok = search.get('token');
-      if (bid && tok) {
+    const confirmationMatch = path.match(/^\/book\/[^/]+\/confirmation\/([^/]+)/);
+    if (confirmationMatch) {
+      const bid = confirmationMatch[1] ?? search.get('bookingId');
+      if (bid) {
         setBookingId(bid);
-        setToken(tok);
         setView('confirmation');
         return;
       }
     }
 
     // Check for manage view
-    const manageMatch = path.match(/\/book\/(?:[^/]+\/)?manage/);
+    const manageMatch = path.match(/^\/book\/[^/]+\/manage\/([^/]+)/);
     if (manageMatch) {
-      const bid = search.get('bookingId') || path.split('/').pop();
-      const tok = search.get('token');
+      const bid = manageMatch[1] ?? search.get('bookingId');
       if (bid) {
         setBookingId(bid);
-        setToken(tok);
         setView('manage');
         return;
       }
@@ -55,16 +55,16 @@ export function PublicBookingApp() {
 
   if (!salonSlug) {
     return (
-      <div className="app">
-        <div className="panel">
-          <h1>Salon ikke fundet</h1>
-          <p className="muted">Kunne ikke finde salon. Tjek URL eller kontakt salonen.</p>
-        </div>
-      </div>
+      <Stack align="center" className="pb-center-sm">
+        <Card>
+          <h1>{c.salonNotFoundTitle}</h1>
+          <p className="pb-muted">{c.salonNotFoundBody}</p>
+        </Card>
+      </Stack>
     );
   }
 
-  if (view === 'confirmation' && bookingId && token) {
+  if (view === 'confirmation' && bookingId) {
     return <Confirmation salonSlug={salonSlug} bookingId={bookingId} />;
   }
 

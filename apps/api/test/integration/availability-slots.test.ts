@@ -3,9 +3,8 @@ import { randomUUID } from 'crypto';
 import { buildApp } from '../../src/server/build-app.ts';
 import { getSupabaseClient } from '../../src/server/db.ts';
 
-const allowIntegration = process.env.ALLOW_INTEGRATION_TESTS === 'true';
-const hasSupabase = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-const itIfSupabase = allowIntegration && hasSupabase ? test : test.skip;
+// Always run tests (setup.ts handles env loading)
+const itIfSupabase = test;
 
 type SeedResult = {
   userId: string;

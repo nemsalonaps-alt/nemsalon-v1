@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:5173",
+      "localStorage": [
+        {
+          "name": "supabase.auth.token",
+          "value": "{\"access_token\":\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwOi8vMTI3LjAuMC4xOjU0MzIxL2F1dGgvdjEiLCJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcwODM5ODk5LCJpYXQiOjE3NzA4MzYyOTksImVtYWlsIjoiZGV2LWN1c3RvbWVyQG5lbXNhbG9uLnRlc3QiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJmdWxsX25hbWUiOiJEZXYgQ3VzdG9tZXIiLCJuYW1lIjoiRGV2IEN1c3RvbWVyIiwicm9sZSI6ImN1c3RvbWVyIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NzA4MzYyOTl9XSwic2Vzc2lvbl9pZCI6IjM3NjUzOTJhLTA5NjgtNDdkMC1iOWJkLWUxNWVhZWFlOWI2NiIsImlzX2Fub255bW91cyI6ZmFsc2V9.FdQUJHvIY3A-MapVhQIYNj-WT57NM00-lwmQCnUZpfM\",\"refresh_token\":\"twp4gt74x5uy\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1770839899,\"user\":{\"id\":\"00000000-0000-0000-0000-000000000003\",\"email\":\"dev-customer@nemsalon.test\"}}"
+        }
+      ]
+    }
+  ]
+}

@@ -1,180 +1,254 @@
 import { useEffect, useState } from 'react';
-import { getCustomerProfile, logoutCustomer, listMyBookings, type CustomerProfile, type CustomerBooking } from '../api';
-import { getCopy } from '../../../i18n';
+import {
+  getCustomerProfile,
+  listMyBookings,
+  cancelMyBooking,
+  updateCustomerProfile,
+  type CustomerProfile,
+  type CustomerBooking,
+} from '../api';
+import { ImpersonationBanner, useImpersonation } from '../../impersonation/ImpersonationBanner';
+import { FeatureState } from '../../../components/FeatureState';
+import { Toast } from '@nemsalon/ui';
+import { BookingsPage } from '../pages/BookingsPage';
+import { ReceiptsPage } from '../pages/ReceiptsPage';
+import { ProfilePage } from '../pages/ProfilePage';
+import { NotificationsPage } from '../pages/NotificationsPage';
+import { SettingsPage } from '../pages/SettingsPage';
+import { FavoritesPage } from '../pages/FavoritesPage';
+import { ErrorBoundary } from '../components/ErrorBoundary';
+import '../portal.css';
 
-const t = getCopy('da');
-
-function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleDateString('da-DK', { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-function formatTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' });
-}
-
-function getStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    pending: t.customerPortal.status.pending,
-    confirmed: t.customerPortal.status.confirmed,
-    in_progress: t.customerPortal.status.in_progress,
-    completed: t.customerPortal.status.completed,
-    cancelled: t.customerPortal.status.cancelled,
-    no_show: t.customerPortal.status.no_show
-  };
-  return labels[status] ?? status;
-}
-
-function getStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    confirmed: 'bg-green-100 text-green-800',
-    in_progress: 'bg-blue-100 text-blue-800',
-    completed: 'bg-gray-100 text-gray-800',
-    cancelled: 'bg-red-100 text-red-800',
-    no_show: 'bg-red-100 text-red-800'
-  };
-  return colors[status] ?? 'bg-gray-100 text-gray-800';
-}
+type Page = 'bookings' | 'receipts' | 'profile' | 'notifications' | 'settings' | 'favorites';
 
 export function CustomerPortal() {
+  const [currentPage, setCurrentPage] = useState<Page>('bookings');
   const [profile, setProfile] = useState<CustomerProfile | null>(null);
   const [bookings, setBookings] = useState<CustomerBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<'all' | 'upcoming' | 'past' | 'cancelled'>('upcoming');
+  const [authRequired, setAuthRequired] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'warning' | 'info';
+  } | null>(null);
+
+  const { isImpersonating, impersonatedUser, checkStatus, stopImpersonation } = useImpersonation();
 
   useEffect(() => {
     loadData();
-  }, [filter]);
+    checkStatus();
+  }, []);
 
   async function loadData() {
     setLoading(true);
     setError(null);
-    
+    setAuthRequired(false);
+
     const [profileRes, bookingsRes] = await Promise.all([
       getCustomerProfile(),
-      listMyBookings({ status: filter, limit: 50 })
+      listMyBookings({ status: 'all', limit: 50 }),
     ]);
-    
+
     if (!profileRes.ok) {
-      setError(profileRes.error);
+      if (profileRes.status === 401 || profileRes.status === 403) {
+        setAuthRequired(true);
+      } else {
+        setError(profileRes.error);
+      }
       setLoading(false);
       return;
     }
-    
+
     setProfile(profileRes.data);
     if (bookingsRes.ok) {
       setBookings(bookingsRes.data.data);
+    } else {
+      setActionError(bookingsRes.error);
     }
     setLoading(false);
   }
 
-  async function handleLogout() {
-    await logoutCustomer();
+  async function handleCancelBooking(booking: CustomerBooking) {
+    setActionError(null);
+    const result = await cancelMyBooking(booking.id);
+    if (!result.ok) {
+      setActionError(result.error);
+      setToast({ message: result.error, type: 'error' });
+      return;
+    }
+    await loadData();
+    setToast({ message: 'Booking annulleret', type: 'success' });
+  }
+
+  async function handleUpdateProfile(data: {
+    name: string;
+    phone: string;
+    consents: {
+      marketingEmail: boolean;
+      marketingSms: boolean;
+      appointmentReminders: boolean;
+      dataProcessing: boolean;
+    };
+  }) {
+    const result = await updateCustomerProfile({
+      name: data.name,
+      phone: data.phone,
+    });
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    setProfile(result.data);
+  }
+
+  const handleSwitchToRole = async (role: 'owner' | 'staff' | 'customer') => {
+    if (role === 'customer') {
+      window.location.href = '/portal';
+      return;
+    }
     window.location.href = '/';
-  }
+  };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">{t.customerPortal.loading}</p>
-        </div>
-      </div>
-    );
-  }
+  const handleReturnToAdmin = async () => {
+    await stopImpersonation();
+  };
 
-  if (error) {
+  if (loading || error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center max-w-md px-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">{t.customerPortal.notLoggedIn.title}</h1>
-          <p className="text-gray-600 mb-4">{t.customerPortal.notLoggedIn.message}</p>
-          <a href="/login?role=customer" className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            {t.customerPortal.notLoggedIn.loginButton}
-          </a>
+      <div className="cp-center">
+        <div className="cp-center-inner">
+          {authRequired && error && !loading ? (
+            <>
+              <h1 className="cp-hero-title">Ikke logget ind</h1>
+              <p className="cp-hero-subtitle">Log ind for at se dine bookinger</p>
+              <a href="/login?role=customer" className="cp-primary-link">
+                Gå til login
+              </a>
+            </>
+          ) : (
+            <FeatureState
+              status={loading ? 'loading' : 'error'}
+              title={loading ? 'Indlæser...' : 'Der opstod en fejl'}
+              description={loading ? 'Indlæser din konto...' : undefined}
+              error={error}
+              onRetry={loadData}
+              retryLabel="Prøv igen"
+              testId="customer-portal-fallback"
+            />
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-gray-900">{t.customerPortal.title}</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">{profile?.name}</span>
-            <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-gray-700">
-              {t.customerPortal.logout}
-            </button>
+    <div className="cp-page">
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {isImpersonating && impersonatedUser && (
+        <div className="cp-banner">
+          <ImpersonationBanner
+            impersonatedUser={impersonatedUser}
+            onSwitchToRole={handleSwitchToRole}
+            onReturnToAdmin={handleReturnToAdmin}
+            isLoading={false}
+            isSticky
+          />
+        </div>
+      )}
+
+      <header className="cp-header">
+        <div className="cp-header-inner">
+          <div className="cp-header-title">
+            <h1 className="cp-title">Min Konto</h1>
+            <span className="cp-muted">{profile?.name}</span>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-6 flex gap-2">
-          {(['upcoming', 'past', 'cancelled', 'all'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium ${
-                filter === f
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-white text-gray-700 hover:bg-gray-50 border'
-              }`}
-            >
-              {f === 'upcoming' ? t.customerPortal.filters.upcoming : f === 'past' ? t.customerPortal.filters.past : f === 'cancelled' ? t.customerPortal.filters.cancelled : t.customerPortal.filters.all}
-            </button>
-          ))}
-        </div>
+      <div className="cp-layout">
+        {/* Navigation */}
+        <nav className="cp-nav">
+          <button
+            className={`cp-nav-item ${currentPage === 'bookings' ? 'cp-nav-active' : ''}`}
+            onClick={() => setCurrentPage('bookings')}
+          >
+            <span className="cp-nav-icon">📅</span>
+            <span className="cp-nav-label">Mine tider</span>
+          </button>
+          <button
+            className={`cp-nav-item ${currentPage === 'receipts' ? 'cp-nav-active' : ''}`}
+            onClick={() => setCurrentPage('receipts')}
+          >
+            <span className="cp-nav-icon">🧾</span>
+            <span className="cp-nav-label">Kvitteringer</span>
+          </button>
+          <button
+            className={`cp-nav-item ${currentPage === 'profile' ? 'cp-nav-active' : ''}`}
+            onClick={() => setCurrentPage('profile')}
+          >
+            <span className="cp-nav-icon">👤</span>
+            <span className="cp-nav-label">Profil</span>
+          </button>
+          <button
+            className={`cp-nav-item ${currentPage === 'notifications' ? 'cp-nav-active' : ''}`}
+            onClick={() => setCurrentPage('notifications')}
+          >
+            <span className="cp-nav-icon">🔔</span>
+            <span className="cp-nav-label">Notifikationer</span>
+          </button>
+          <button
+            className={`cp-nav-item ${currentPage === 'favorites' ? 'cp-nav-active' : ''}`}
+            onClick={() => setCurrentPage('favorites')}
+          >
+            <span className="cp-nav-icon">⭐</span>
+            <span className="cp-nav-label">Favoritter</span>
+          </button>
+          <div className="cp-nav-divider" />
+          <button
+            className={`cp-nav-item ${currentPage === 'settings' ? 'cp-nav-active' : ''}`}
+            onClick={() => setCurrentPage('settings')}
+          >
+            <span className="cp-nav-icon">⚙️</span>
+            <span className="cp-nav-label">Indstillinger</span>
+          </button>
+        </nav>
 
-        {bookings.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-lg shadow">
-            <p className="text-gray-500">{t.customerPortal.emptyState}</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {bookings.map((booking) => (
-              <div key={booking.id} className="bg-white rounded-lg shadow p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="font-semibold text-lg">{booking.salonName}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                        {getStatusLabel(booking.status)}
-                      </span>
-                    </div>
-                    <p className="text-gray-600">{booking.serviceName}</p>
-                    <p className="text-gray-500 text-sm">{booking.staffName}</p>
-                    <div className="mt-2 text-sm text-gray-600">
-                      <span className="font-medium">{formatDate(booking.startTime)}</span>
-                      {' kl. '}
-                      <span>{formatTime(booking.startTime)}</span>
-                      {' - '}
-                      <span>{formatTime(booking.endTime)}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{booking.totalAmount} {booking.currency}</p>
-                    <a
-                      href={`/book/${booking.salonSlug}?manage=${booking.id}`}
-                      className="text-sm text-blue-600 hover:text-blue-800 mt-2 inline-block"
-                    >
-                      {t.customerPortal.viewDetails}
-                    </a>
-                  </div>
-                </div>
+        {/* Main Content */}
+        <main className="cp-main">
+          <ErrorBoundary
+            fallback={
+              <div className="cp-page-container">
+                <FeatureState
+                  status="error"
+                  title="Der opstod en fejl"
+                  description="Noget gik galt. Prøv at genindlæse siden."
+                  onRetry={() => window.location.reload()}
+                  retryLabel="Genindlæs"
+                />
               </div>
-            ))}
-          </div>
-        )}
-      </main>
+            }
+          >
+            {currentPage === 'bookings' && (
+              <BookingsPage
+                bookings={bookings}
+                loading={loading}
+                onReschedule={async () => {}}
+                onCancel={handleCancelBooking}
+                actionError={actionError}
+              />
+            )}
+            {currentPage === 'receipts' && <ReceiptsPage />}
+            {currentPage === 'profile' && (
+              <ProfilePage profile={profile} loading={loading} onUpdate={handleUpdateProfile} />
+            )}
+            {currentPage === 'notifications' && <NotificationsPage />}
+            {currentPage === 'settings' && <SettingsPage />}
+            {currentPage === 'favorites' && <FavoritesPage />}
+          </ErrorBoundary>
+        </main>
+      </div>
     </div>
   );
 }

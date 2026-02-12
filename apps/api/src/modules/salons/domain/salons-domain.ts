@@ -18,6 +18,13 @@ export type Salon = {
   currency: string;
   cancellationWindowMinutes: number;
   status?: 'draft' | 'active';
+  stripeAccountId?: string | null;
+  stripeDetailsSubmitted?: boolean;
+  stripeChargesEnabled?: boolean;
+  stripePayoutsEnabled?: boolean;
+  stripeOnboardingCompletedAt?: string | null;
+  stripeConnectState?: string | null;
+  stripeConnectStateExpiresAt?: string | null;
   phone?: string | null;
   email?: string | null;
   addressLine1?: string | null;

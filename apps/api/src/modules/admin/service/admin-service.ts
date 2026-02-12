@@ -1,3 +1,7 @@
+import { adminRepo } from '../repo/admin-repo.js';
+
 export const adminService = {
-  // TODO: implement admin domain logic
+  getOverview() {
+    return adminRepo.getOverview();
+  }
 };

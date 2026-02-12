@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getCopy } from '../../../i18n';
+import { formatDate, formatTime, formatPrice } from '@nemsalon/shared';
+import { getCopy, getStoredLocale, resolveLocale, type CopyType } from '../../../i18n';
 import { resolveBookingToken } from '../../public-booking/booking-token';
+import { downloadIcsInvite } from '../../../lib/calendar';
+import { buildLocation } from '../../../lib/ics';
 import {
   cancelPublicBooking,
   createPublicCheckout,
@@ -10,18 +13,10 @@ import {
   type AvailabilitySlot,
   type PublicBooking
 } from '../../public-booking/api';
-
-function formatDate(value: string, locale: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleDateString(locale, { day: '2-digit', month: 'long', year: 'numeric' });
-}
-
-function formatTime(value: string, locale: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.valueOf())) return value;
-  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-}
+import { Card, Stack, Button, Badge, Input } from '@nemsalon/ui';
+import { FeatureState } from '../../../components/FeatureState';
+import { toLocalDateInputValue } from '../../../lib/dates';
+import '../portal.css';
 
 function getStatusLabel(status: string, t: ReturnType<typeof getCopy>): string {
   const labels: Record<string, string> = {
@@ -36,7 +31,7 @@ function getStatusLabel(status: string, t: ReturnType<typeof getCopy>): string {
 }
 
 function getPaymentStatusLabel(status: string | null | undefined, t: ReturnType<typeof getCopy>): string {
-  if (!status) return '—';
+  if (!status) return t.customerDashboard.paymentUnknown;
   const labels: Record<string, string> = {
     pending: t.customerDashboard.paymentStatus.pending,
     paid: t.customerDashboard.paymentStatus.paid,
@@ -47,13 +42,14 @@ function getPaymentStatusLabel(status: string | null | undefined, t: ReturnType<
 }
 
 function buildAddressString(booking: PublicBooking): string | null {
-  const parts: string[] = [];
-  if (booking.salonAddressLine1) parts.push(booking.salonAddressLine1);
-  if (booking.salonAddressLine2) parts.push(booking.salonAddressLine2);
   const cityPart = [booking.salonPostalCode, booking.salonCity].filter(Boolean).join(' ');
-  if (cityPart) parts.push(cityPart);
-  if (booking.salonCountry && booking.salonCountry !== 'DK') parts.push(booking.salonCountry);
-  return parts.length > 0 ? parts.join(', ') : null;
+  const address = buildLocation([
+    booking.salonAddressLine1,
+    booking.salonAddressLine2,
+    cityPart || undefined,
+    booking.salonCountry && booking.salonCountry !== 'DK' ? booking.salonCountry : undefined
+  ]);
+  return address || null;
 }
 
 function buildGoogleMapsUrl(booking: PublicBooking): string | null {
@@ -70,52 +66,40 @@ function isCancellationWindowClosed(booking: PublicBooking): boolean {
   return Date.now() > deadline.getTime();
 }
 
-function mapApiError(error: string, t: ReturnType<typeof getCopy>): string {
+function mapApiError(error: string, t: CopyType): string {
   const key = error as keyof typeof t.apiErrors;
-  if (key in t.apiErrors) {
-    const value = t.apiErrors[key];
-    return typeof value === 'string' ? value : t.apiErrors.generic;
+  if (key in t.apiErrors && typeof t.apiErrors[key] === 'string') {
+    return t.apiErrors[key] as string;
   }
   if (error.includes('BOOKING_CANCEL_WINDOW_PASSED') || error.includes('cancellation_window')) {
-    return t.apiErrors['error.booking.cancellation_window'] ?? t.apiErrors.generic;
+    const cancelError = t.apiErrors['error.booking.cancellation_window'];
+    return typeof cancelError === 'string' ? cancelError : t.apiErrors.generic;
   }
   return t.apiErrors.generic;
 }
 
-function generateICSContent(booking: PublicBooking, locale: string): string {
-  const start = new Date(booking.startTime);
-  const end = new Date(booking.endTime);
-  const formatICSDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+function downloadICS(booking: PublicBooking, locale: string) {
   const address = buildAddressString(booking) ?? '';
   const t = getCopy(locale);
-  const description = `${t.customerDashboard.title} - ${booking.salonName ?? ''}\n${t.customerDashboard.labels.service}: ${booking.serviceName ?? ''}\n${t.customerDashboard.labels.staff}: ${booking.staffName ?? ''}`;
-  return [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Nemsalon//Booking//DA',
-    'BEGIN:VEVENT',
-    `DTSTART:${formatICSDate(start)}`,
-    `DTEND:${formatICSDate(end)}`,
-    `SUMMARY:${booking.serviceName ?? 'Booking'} hos ${booking.salonName ?? 'salonen'}`,
-    `DESCRIPTION:${description}`,
-    `LOCATION:${address}`,
-    `UID:${booking.id}@nemsalon.app`,
-    'END:VEVENT',
-    'END:VCALENDAR'
-  ].join('\r\n');
-}
-
-function downloadICS(booking: PublicBooking, locale: string) {
-  const content = generateICSContent(booking, locale);
-  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `booking-${booking.id.slice(0, 8)}.ics`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const description = t.customerDashboard.ics.description
+    .replace('{title}', t.customerDashboard.title)
+    .replace('{salon}', booking.salonName ?? '')
+    .replace('{service}', booking.serviceName ?? '')
+    .replace('{staff}', booking.staffName ?? '');
+  const summary = t.customerDashboard.ics.summary
+    .replace('{service}', booking.serviceName ?? t.customerDashboard.ics.title)
+    .replace('{salon}', booking.salonName ?? '');
+  downloadIcsInvite(
+    {
+      id: booking.id,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      summary,
+      description,
+      location: address || undefined
+    },
+    `booking-${booking.id.slice(0, 8)}.ics`,
+  );
 }
 
 export function CustomerDashboard({
@@ -127,19 +111,25 @@ export function CustomerDashboard({
 }) {
   const [booking, setBooking] = useState<PublicBooking | null>(null);
   const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [selectedDate, setSelectedDate] = useState(() => toLocalDateInputValue());
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [isRecovering, setIsRecovering] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [actionState, setActionState] = useState<'idle' | 'cancelling' | 'rescheduling' | 'paying'>('idle');
   const token = useMemo(() => resolveBookingToken(bookingId), [bookingId]);
-  const locale = booking?.salonLocale ?? 'da-DK';
+  const resolvedLocale = resolveLocale(booking?.salonLocale ?? getStoredLocale());
+  const locale = resolvedLocale === 'da' ? 'da-DK' : 'en-US';
   const t = useMemo(() => getCopy(locale), [locale]);
 
   useEffect(() => {
     if (!token) return;
     let active = true;
     async function load() {
+      setLoading(true);
+      setError('');
       const result = await fetchPublicBooking(bookingId, token!);
       if (!active) return;
       if (result.ok) {
@@ -147,6 +137,7 @@ export function CustomerDashboard({
       } else {
         setError(mapApiError(result.error, t));
       }
+      setLoading(false);
     }
     load();
     return () => { active = false; };
@@ -162,6 +153,7 @@ export function CustomerDashboard({
     if (!token || !booking || !isRescheduling) return;
     let active = true;
     async function loadSlots() {
+      setSlotsLoading(true);
       const from = new Date(`${selectedDate}T00:00:00`);
       const result = await fetchPublicAvailability({
         salonSlug,
@@ -178,6 +170,7 @@ export function CustomerDashboard({
       } else {
         setError(mapApiError(result.error, t));
       }
+      setSlotsLoading(false);
     }
     loadSlots();
     return () => { active = false; };
@@ -201,7 +194,7 @@ export function CustomerDashboard({
       return;
     }
     setBooking(result.data);
-    setStatus('Booking annulleret.');
+    setStatus(t.customerDashboard.states.cancelled);
   }
 
   async function handleReschedule(slot: AvailabilitySlot) {
@@ -222,7 +215,7 @@ export function CustomerDashboard({
     }
     setBooking(result.data);
     setIsRescheduling(false);
-    setStatus('Booking flyttet.');
+    setStatus(t.customerDashboard.states.rescheduled);
   }
 
   async function handlePayNow() {
@@ -245,25 +238,46 @@ export function CustomerDashboard({
     window.location.href = result.data.checkoutUrl;
   }
 
+  const handleRecover = async () => {
+    if (!token) return;
+    setIsRecovering(true);
+    setError('');
+    try {
+      const result = await fetchPublicBooking(bookingId, token);
+      if (result.ok) {
+        setBooking(result.data);
+      } else {
+        setError(mapApiError(result.error, t));
+      }
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
   if (!token) {
     return (
-      <div className="app">
-        <div className="panel" style={{ textAlign: 'center', padding: '48px 24px' }}>
-          <h1>Dette link er ikke længere aktivt</h1>
-          <p className="muted">Kontakt salonen hvis du har spørgsmål til din booking.</p>
-        </div>
-      </div>
+      <Stack align="center" className="cp-pad-48">
+        <Card className="cp-text-center">
+          <h1>{t.customerDashboard.inactiveLinkTitle}</h1>
+          <p className="cp-muted">{t.customerDashboard.inactiveLinkBody}</p>
+        </Card>
+      </Stack>
     );
   }
 
   if (!booking) {
     return (
-      <div className="app">
-        <div className="panel">
-          <h1>Indlæser din booking...</h1>
-          {error && <div className="banner" style={{ marginTop: 16 }}>{error}</div>}
-        </div>
-      </div>
+      <Stack align="center" className="cp-pad-24">
+        <FeatureState
+          status={loading ? 'loading' : isRecovering ? 'recovery' : 'error'}
+          title={loading ? t.customerDashboard.loadingTitle : t.customerDashboard.errorTitle}
+          description={loading ? t.customerDashboard.loadingBody : undefined}
+          error={error || undefined}
+          onRetry={!loading ? handleRecover : undefined}
+          retryLabel={t.customerDashboard.retry}
+          testId="customer-dashboard-fallback"
+        />
+      </Stack>
     );
   }
 
@@ -277,148 +291,239 @@ export function CustomerDashboard({
 
   if (isCompleted) {
     return (
-      <div className="app">
-        <div className="panel" style={{ textAlign: 'center' }}>
-          <p className="eyebrow">{booking.salonName ?? salonSlug}</p>
+      <Stack gap="lg" className="cp-pad-24">
+        <Card className="cp-text-center">
+          <p className="cp-salon-uptitle">{booking.salonName ?? salonSlug}</p>
           <h1>{t.customerDashboard.completed.title}</h1>
-          <p className="muted">{t.customerDashboard.completed.message}</p>
-        </div>
-        <div className="panel" style={{ marginTop: 16 }}>
-          <div className="grid two">
-            <div><p className="muted">{t.customerDashboard.labels.date}</p><strong>{formatDate(booking.startTime, locale)}</strong></div>
-            <div><p className="muted">{t.customerDashboard.labels.time}</p><strong>{formatTime(booking.startTime, locale)}</strong></div>
-            <div><p className="muted">{t.customerDashboard.labels.service}</p><strong>{booking.serviceName ?? '—'}</strong></div>
-            <div><p className="muted">{t.customerDashboard.labels.staff}</p><strong>{booking.staffName ?? '—'}</strong></div>
-          </div>
-        </div>
-      </div>
+          <p className="cp-muted">{t.customerDashboard.completed.message}</p>
+        </Card>
+        <Card>
+          <Stack direction="row" gap="md" className="cp-wrap">
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.date}</p>
+              <strong>{formatDate(booking.startTime, { locale: locale })}</strong>
+            </div>
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.time}</p>
+              <strong>{formatTime(booking.startTime, { locale: locale })}</strong>
+            </div>
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.service}</p>
+              <strong>{booking.serviceName ?? t.customerDashboard.paymentUnknown}</strong>
+            </div>
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.staff}</p>
+              <strong>{booking.staffName ?? t.customerDashboard.paymentUnknown}</strong>
+            </div>
+          </Stack>
+        </Card>
+      </Stack>
     );
   }
 
   if (isCancelled) {
     return (
-      <div className="app">
-        <div className="panel" style={{ textAlign: 'center' }}>
-          <p className="eyebrow">{booking.salonName ?? salonSlug}</p>
+      <Stack gap="lg" className="cp-pad-24">
+        <Card className="cp-text-center">
+          <p className="cp-salon-uptitle">{booking.salonName ?? salonSlug}</p>
           <h1>{t.customerDashboard.cancelled.title}</h1>
-          <p className="muted">{t.customerDashboard.cancelled.message}</p>
-        </div>
-        <div className="panel" style={{ marginTop: 16 }}>
-          <div className="grid two">
-            <div><p className="muted">{t.customerDashboard.labels.date}</p><strong>{formatDate(booking.startTime, locale)}</strong></div>
-            <div><p className="muted">{t.customerDashboard.labels.time}</p><strong>{formatTime(booking.startTime, locale)}</strong></div>
-            <div><p className="muted">{t.customerDashboard.labels.service}</p><strong>{booking.serviceName ?? '—'}</strong></div>
-            <div><p className="muted">{t.customerDashboard.labels.staff}</p><strong>{booking.staffName ?? '—'}</strong></div>
-          </div>
-        </div>
-      </div>
+          <p className="cp-muted">{t.customerDashboard.cancelled.message}</p>
+        </Card>
+        <Card>
+          <Stack direction="row" gap="md" className="cp-wrap">
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.date}</p>
+              <strong>{formatDate(booking.startTime, { locale: locale })}</strong>
+            </div>
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.time}</p>
+              <strong>{formatTime(booking.startTime, { locale: locale })}</strong>
+            </div>
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.service}</p>
+              <strong>{booking.serviceName ?? t.customerDashboard.paymentUnknown}</strong>
+            </div>
+            <div className="cp-col">
+              <p className="cp-label-text">{t.customerDashboard.labels.staff}</p>
+              <strong>{booking.staffName ?? t.customerDashboard.paymentUnknown}</strong>
+            </div>
+          </Stack>
+        </Card>
+      </Stack>
     );
   }
 
   return (
-    <div className="app">
-      <div className="panel">
-        <p className="eyebrow">{t.customerDashboard.title}</p>
-        <h1>{booking.salonName ?? salonSlug}</h1>
-        {address && (
-          <p className="muted" style={{ marginTop: 8 }}>
-            {address}
-            {mapsUrl && (
-              <>{' '}<a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{t.customerDashboard.actions.showOnMap}</a></>
-            )}
-          </p>
-        )}
-      </div>
+    <Stack gap="lg" className="cp-pad-24">
+      {/* Hero Booking Card */}
+      <Card>
+        <Stack direction="row" gap="md" align="center" justify="between">
+          <p className="cp-salon-uptitle">{booking.salonName ?? salonSlug}</p>
+          <Badge variant={booking.status === 'confirmed' ? 'success' : booking.status === 'pending' ? 'warning' : 'default'}>
+            {getStatusLabel(booking.status, t)}
+          </Badge>
+        </Stack>
 
-      <div className="panel" style={{ marginTop: 16 }}>
-        <div className="grid two">
-          <div><p className="muted">{t.customerDashboard.labels.date}</p><strong>{formatDate(booking.startTime, locale)}</strong></div>
-          <div><p className="muted">{t.customerDashboard.labels.time}</p><strong>{formatTime(booking.startTime, locale)}</strong></div>
-          <div><p className="muted">{t.customerDashboard.labels.service}</p><strong>{booking.serviceName ?? '—'}</strong></div>
-          <div><p className="muted">{t.customerDashboard.labels.staff}</p><strong>{booking.staffName ?? '—'}</strong></div>
-          <div><p className="muted">{t.customerDashboard.labels.status}</p><strong>{getStatusLabel(booking.status, t)}</strong></div>
-          <div>
-            <p className="muted">{t.customerDashboard.labels.payment}</p>
-            <strong>{getPaymentStatusLabel(booking.paymentStatus, t)}</strong>
-            {booking.paymentStatus === 'pending' && booking.totalAmount > 0 && (
-              <div style={{ marginTop: 8 }}>
-                <button className="btn" onClick={handlePayNow} disabled={actionState !== 'idle'}>{t.customerDashboard.actions.payNow}</button>
-              </div>
-            )}
+        <Stack direction="row" gap="lg" align="center" className="cp-top-lg">
+          <div className="cp-date-badge">
+            <span className="cp-date-day">{new Date(booking.startTime).getDate()}</span>
+            <span className="cp-date-month">
+              {new Date(booking.startTime).toLocaleDateString(locale, { month: 'short' })}
+            </span>
           </div>
-        </div>
-      </div>
+          <div>
+            <strong className="cp-time-strong">{formatTime(booking.startTime, { locale })}</strong>
+            <p className="cp-muted">
+              {new Date(booking.startTime).toLocaleDateString(locale, { weekday: 'long' })}
+            </p>
+          </div>
+        </Stack>
 
-      {canModify && windowClosed && (
-        <div className="panel" style={{ marginTop: 16 }}>
-          <p className="muted">{t.customerDashboard.windowClosed}</p>
-        </div>
-      )}
+        <Stack gap="sm" className="cp-top-lg">
+          <Stack direction="row" gap="md" justify="between">
+            <span className="cp-muted">{t.customerDashboard.labels.service}</span>
+            <strong>{booking.serviceName ?? t.customerDashboard.paymentUnknown}</strong>
+          </Stack>
+          <Stack direction="row" gap="md" justify="between">
+            <span className="cp-muted">{t.customerDashboard.labels.staff}</span>
+            <strong>{booking.staffName ?? t.customerDashboard.paymentUnknown}</strong>
+          </Stack>
+          {address && (
+            <Stack gap="xs">
+              <span className="cp-muted">{t.customerDashboard.labels.address}</span>
+              <Stack direction="row" gap="sm" align="center">
+                <strong>{address}</strong>
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="cp-link">
+                    {t.customerDashboard.actions.showOnMap}
+                  </a>
+                )}
+              </Stack>
+            </Stack>
+          )}
+        </Stack>
 
-      {canModify && !windowClosed && (
-        <div className="panel" style={{ marginTop: 16 }}>
-          <h3 style={{ marginBottom: 16 }}>{t.customerDashboard.actions.changeBooking}</h3>
-          {!isRescheduling ? (
-            <div className="btn-row">
-              <button className="btn ghost" onClick={() => setIsRescheduling(true)} disabled={actionState !== 'idle'}>{t.customerDashboard.actions.reschedule}</button>
-              <button className="btn ghost" onClick={handleCancel} disabled={actionState !== 'idle'}>{t.customerDashboard.actions.cancel}</button>
-            </div>
+        {booking.paymentStatus === 'pending' && booking.totalAmount > 0 && (
+          <Card variant="outlined" className="cp-warning-card">
+            <Stack direction="row" gap="md" align="center" justify="between">
+              <span className="cp-price">{formatPrice(booking.totalAmount, booking.currency ?? 'DKK', locale)}</span>
+              <span className="cp-muted">{getPaymentStatusLabel(booking.paymentStatus, t)}</span>
+              <Button variant="primary" onClick={handlePayNow} isLoading={actionState !== 'idle'}>
+                {t.customerDashboard.actions.payNow}
+              </Button>
+            </Stack>
+          </Card>
+        )}
+      </Card>
+
+      {/* Action Section */}
+      {canModify && (
+        <Card>
+          <h3>{t.customerDashboard.actions.changeBooking}</h3>
+
+          {windowClosed ? (
+            <Card variant="outlined" className="cp-warning-card">
+              <p>{t.customerDashboard.windowClosed}</p>
+            </Card>
+          ) : !isRescheduling ? (
+            <Stack direction="row" gap="md">
+              <Button
+                variant="secondary"
+                onClick={() => setIsRescheduling(true)}
+                disabled={actionState !== 'idle'}
+              >
+                📅 {t.customerDashboard.actions.reschedule}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleCancel}
+                disabled={actionState !== 'idle'}
+              >
+                ✕ {t.customerDashboard.actions.cancel}
+              </Button>
+            </Stack>
           ) : (
-            <>
-              <label className="field">
-                <span className="label">{t.customerDashboard.actions.selectNewTime}</span>
-                <input
-                  className="input"
-                  type="date"
-                  value={selectedDate}
-                  min={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                />
-              </label>
-              <div className="list" style={{ marginTop: 12 }}>
+            <Stack gap="md">
+              <Input
+                label={t.customerDashboard.actions.selectNewTime}
+                type="date"
+                fullWidth
+                value={selectedDate}
+                min={toLocalDateInputValue()}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+              <Stack direction="row" gap="sm" className="cp-wrap">
                 {slots.map((slot) => (
-                  <button
+                  <Button
                     key={slot.startUtc}
-                    className="list-card"
-                    type="button"
+                    variant="ghost"
+                    size="sm"
                     onClick={() => handleReschedule(slot)}
                     disabled={actionState !== 'idle'}
                   >
-                    <div><strong>{formatTime(slot.startUtc, locale)}</strong></div>
-                    <div className="list-meta"><span>{t.customerDashboard.actions.selectNewTime}</span></div>
-                  </button>
+                    {formatTime(slot.startUtc, { locale })}
+                  </Button>
                 ))}
-              </div>
-              {slots.length === 0 && <p className="muted">{t.customerDashboard.noSlots}</p>}
-              <button className="btn ghost" onClick={() => setIsRescheduling(false)} style={{ marginTop: 12 }} disabled={actionState !== 'idle'}>{t.customerDashboard.actions.cancelReschedule}</button>
-            </>
+              </Stack>
+              {slotsLoading && <p className="cp-muted">{t.customerDashboard.loadingSlots}</p>}
+              {!slotsLoading && slots.length === 0 && (
+                <p className="cp-muted">{t.customerDashboard.noSlots}</p>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsRescheduling(false)}
+                disabled={actionState !== 'idle'}
+              >
+                {t.customerDashboard.actions.cancelReschedule}
+              </Button>
+            </Stack>
           )}
-        </div>
+        </Card>
       )}
 
-      <div className="panel" style={{ marginTop: 16 }}>
-        <h3 style={{ marginBottom: 16 }}>{t.customerDashboard.practicalInfo.title}</h3>
-        <div className="grid two">
+      {/* Practical Info */}
+      <Card>
+        <h3>{t.customerDashboard.practicalInfo.title}</h3>
+        <Stack direction="row" gap="md" className="cp-wrap">
           {booking.salonPhone && (
-            <div>
-              <p className="muted">{t.customerDashboard.labels.phone}</p>
-              <a href={`tel:${booking.salonPhone}`} style={{ color: 'var(--accent)' }}>{booking.salonPhone}</a>
-            </div>
+            <a href={`tel:${booking.salonPhone}`} className="cp-info-card">
+              <span>📞</span>
+              <Stack gap="xs">
+                <span className="cp-info-label">{t.customerDashboard.labels.phone}</span>
+                <strong>{booking.salonPhone}</strong>
+              </Stack>
+            </a>
           )}
           {booking.salonEmail && (
-            <div>
-              <p className="muted">{t.customerDashboard.labels.email}</p>
-              <a href={`mailto:${booking.salonEmail}`} style={{ color: 'var(--accent)' }}>{booking.salonEmail}</a>
-            </div>
+            <a href={`mailto:${booking.salonEmail}`} className="cp-info-card">
+              <span>✉️</span>
+              <Stack gap="xs">
+                <span className="cp-info-label">{t.customerDashboard.labels.email}</span>
+                <strong>{booking.salonEmail}</strong>
+              </Stack>
+            </a>
           )}
-        </div>
-        <div className="btn-row" style={{ marginTop: 16 }}>
-          <button className="btn ghost" onClick={() => downloadICS(booking, locale)}>{t.customerDashboard.actions.addToCalendar}</button>
-        </div>
-      </div>
+          <button onClick={() => downloadICS(booking, locale)} className="cp-info-card cp-info-button">
+            <span>📅</span>
+            <Stack gap="xs" className="cp-text-left">
+              <span className="cp-info-label">{t.customerDashboard.actions.addToCalendar}</span>
+              <strong>{t.customerDashboard.calendarProvider}</strong>
+            </Stack>
+          </button>
+        </Stack>
+      </Card>
 
-      {status && <div className="note" style={{ marginTop: 16 }}>{status}</div>}
-      {error && <div className="banner" style={{ marginTop: 16 }}>{error}</div>}
-    </div>
+      {status && (
+        <Card variant="outlined" className="cp-status-card">
+          <p className="cp-status-text">{status}</p>
+        </Card>
+      )}
+      {error && (
+        <Card variant="outlined" className="cp-error-card cp-error-card-alt">
+          <p className="cp-error-text">{error}</p>
+        </Card>
+      )}
+    </Stack>
   );
 }

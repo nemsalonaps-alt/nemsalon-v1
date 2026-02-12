@@ -1,4 +1,5 @@
 import { getCopy } from '../copy';
+import { Card } from '@nemsalon/ui';
 
 type AssignServicesProps = {
   assignService: boolean;
@@ -9,8 +10,8 @@ type AssignServicesProps = {
 export function AssignServices({ assignService, error, onToggle }: AssignServicesProps) {
   const copy = getCopy();
   return (
-    <div className="panel">
-      <label className="toggle" style={{ marginTop: 18 }}>
+    <Card variant="outlined">
+      <label className="onb-assign-label">
         <input
           type="checkbox"
           checked={assignService}
@@ -18,10 +19,10 @@ export function AssignServices({ assignService, error, onToggle }: AssignService
         />
         {copy.staff.service.assignLabel}
       </label>
-      {error && <span className="error">{error}</span>}
-      <div className="note" style={{ marginTop: 12 }}>
+      {error && <span className="onb-error onb-error-block">{error}</span>}
+      <p className="onb-assign-note">
         {copy.staff.service.assignNote}
-      </div>
-    </div>
+      </p>
+    </Card>
   );
 }

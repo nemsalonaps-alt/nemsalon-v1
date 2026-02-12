@@ -15,6 +15,7 @@ export type Booking = {
   startTime: string;
   endTime: string;
   status: BookingStatus;
+  expiresAt?: string | null;
   notes?: string | null;
   totalAmount: number;
   currency: string;

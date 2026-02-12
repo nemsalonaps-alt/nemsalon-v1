@@ -1,5 +1,11 @@
 import { getSupabaseClient } from '../../../server/db.js';
 import { httpError } from '../../../server/http-error.js';
+import {
+  validateString,
+  validateOptionalString,
+  validateEnum,
+  validateNumber
+} from '../../../shared/validation.js';
 import type { Booking, BookingStatus } from '../domain/bookings-domain.js';
 
 export type BookingInsert = {
@@ -10,6 +16,7 @@ export type BookingInsert = {
   startTime: string;
   endTime: string;
   status: BookingStatus;
+  expiresAt?: string | null;
   idempotencyKey?: string;
   notes?: string | null;
   totalAmount: number;
@@ -28,6 +35,7 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
       start_time: input.startTime,
       end_time: input.endTime,
       status: input.status,
+      expires_at: input.expiresAt ?? null,
       idempotency_key: input.idempotencyKey ?? null,
       notes: input.notes ?? null,
       total_amount: input.totalAmount,
@@ -38,7 +46,26 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
 
   if (error) {
     // eslint-disable-next-line no-console
-    console.error('[DEBUG] Database error creating booking:', error);
+    console.error('[DEBUG] Database error creating booking:', {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      // Log the actual columns being inserted to debug mismatches
+      columns: Object.keys({
+        salon_id: input.salonId,
+        customer_id: input.customerId,
+        staff_id: input.staffId,
+        service_id: input.serviceId,
+        start_time: input.startTime,
+        end_time: input.endTime,
+        status: input.status,
+        idempotency_key: input.idempotencyKey ?? null,
+        notes: input.notes ?? null,
+        total_amount: input.totalAmount,
+        currency: input.currency
+      })
+    });
     if (error.code === '23P01') {
       throw httpError(
         409,
@@ -58,7 +85,15 @@ export async function createBooking(input: BookingInsert): Promise<Booking> {
         details: error.details
       });
     }
-    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+    // Include error code in the message for debugging
+    const detailedMessage = error.code 
+      ? `Database error ${error.code}: ${error.message}` 
+      : `Database error: ${error.message}`;
+    throw httpError(500, 'DATABASE_ERROR', detailedMessage, { 
+      details: error.details,
+      code: error.code,
+      hint: error.hint
+    });
   }
 
   return mapBookingRow(data);
@@ -103,7 +138,7 @@ export async function updateBookingStatus(
   const client = getSupabaseClient();
   const { data, error } = await client
     .from('bookings')
-    .update({ status })
+    .update({ status, expires_at: status === 'pending' ? undefined : null })
     .eq('id', bookingId)
     .select('*')
     .maybeSingle();
@@ -122,6 +157,7 @@ export async function updateBookingFields(input: {
 }): Promise<Booking | null> {
   const updates: Record<string, unknown> = {};
   if (input.status) updates.status = input.status;
+  if (input.status && input.status !== 'pending') updates.expires_at = null;
   if (input.notes !== undefined) updates.notes = input.notes;
 
   const client = getSupabaseClient();
@@ -188,7 +224,8 @@ export async function cancelBooking(input: {
       status: 'cancelled',
       cancel_reason_key: input.reasonKey ?? null,
       cancel_note: input.note ?? null,
-      cancelled_at: new Date().toISOString()
+      cancelled_at: new Date().toISOString(),
+      expires_at: null
     })
     .eq('id', input.bookingId)
     .select('*')
@@ -262,18 +299,61 @@ export async function listBookings(input: {
   return (data ?? []).map(mapBookingRow);
 }
 
+export async function listExpiredPendingBookings(limit: number): Promise<Booking[]> {
+  const client = getSupabaseClient();
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from('bookings')
+    .select('*')
+    .eq('status', 'pending')
+    .lt('expires_at', now)
+    .order('expires_at', { ascending: true })
+    .limit(limit);
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return (data ?? []).map(mapBookingRow);
+}
+
+export async function expirePendingBookings(bookingIds: string[]): Promise<number> {
+  if (bookingIds.length === 0) return 0;
+  const client = getSupabaseClient();
+  const now = new Date().toISOString();
+  const { data, error } = await client
+    .from('bookings')
+    .update({
+      status: 'cancelled',
+      cancel_reason_key: 'booking.expired',
+      cancelled_at: now,
+      expires_at: null
+    })
+    .in('id', bookingIds)
+    .eq('status', 'pending')
+    .select('id');
+
+  if (error) {
+    throw httpError(500, 'DATABASE_ERROR', error.message, { details: error.details });
+  }
+
+  return data?.length ?? 0;
+}
+
 function mapBookingRow(row: Record<string, unknown>): Booking {
+  const validStatuses = ['pending', 'confirmed', 'in_progress', 'cancelled', 'completed', 'no_show'] as const;
   return {
-    id: row.id as string,
-    salonId: row.salon_id as string,
-    customerId: row.customer_id as string,
-    staffId: row.staff_id as string,
-    serviceId: row.service_id as string,
-    startTime: row.start_time as string,
-    endTime: row.end_time as string,
-    status: row.status as Booking['status'],
-    notes: row.notes as string | null,
-    totalAmount: Number(row.total_amount),
-    currency: row.currency as string
+    id: validateString(row.id, 'id'),
+    salonId: validateString(row.salon_id, 'salon_id'),
+    customerId: validateString(row.customer_id, 'customer_id'),
+    staffId: validateString(row.staff_id, 'staff_id'),
+    serviceId: validateString(row.service_id, 'service_id'),
+    startTime: validateString(row.start_time, 'start_time'),
+    endTime: validateString(row.end_time, 'end_time'),
+    status: validateEnum(row.status as string, 'status', validStatuses),
+    expiresAt: validateOptionalString(row.expires_at, 'expires_at'),
+    notes: validateOptionalString(row.notes, 'notes'),
+    totalAmount: validateNumber(row.total_amount, 'total_amount'),
+    currency: validateString(row.currency, 'currency')
   };
 }

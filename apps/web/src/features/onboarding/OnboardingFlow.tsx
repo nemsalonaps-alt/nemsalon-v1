@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   fetchMe,
   trackEvent,
@@ -15,7 +15,10 @@ import {
   cancelBooking,
   rescheduleBooking,
   activateSalon,
-  inviteStaff
+  inviteStaff,
+  getStripeConnectStatus,
+  startStripeConnect,
+  type StripeConnectStatus,
 } from './api';
 import { Gate } from './pages/Gate';
 import { SalonStep } from './pages/SalonStep';
@@ -23,6 +26,7 @@ import { SetupStep } from './pages/SetupStep';
 import { FirstBookingCTA } from './components/FirstBookingCTA';
 import { Progress } from './components/Progress';
 import { StepLayout } from './components/StepLayout';
+import { Card, Stack, Button, Badge } from '@nemsalon/ui';
 import type {
   BookingForm,
   GateState,
@@ -32,9 +36,11 @@ import type {
   StepId,
   WeeklyHours,
   DayId,
-  AvailabilitySlot
+  AvailabilitySlot,
 } from './types';
-import { getCopy, getStoredLocale, setStoredLocale } from './copy';
+import type { SalonType } from '@nemsalon/shared';
+import { getCopy, getStoredLocale, setStoredLocale, resolveLocale } from './copy';
+import type { CopyType } from '../../i18n';
 import { onAuthStateChange } from '../../lib/auth';
 import {
   addMinutes,
@@ -44,9 +50,22 @@ import {
   toMinorUnits,
   validateBooking,
   validateSalon,
-  validateStaffAndService
+  validateStaffAndService,
 } from './schema';
 import { buildBookingConfirmationUrl, buildBookingManageUrl } from '../../lib/public-url';
+import './onboarding.css';
+
+function mapApiError(error: string, copy: CopyType): string {
+  const key = error as keyof typeof copy.apiErrors;
+  if (key in copy.apiErrors && typeof copy.apiErrors[key] === 'string') {
+    return copy.apiErrors[key] as string;
+  }
+  if (error.includes('BOOKING_CANCEL_WINDOW_PASSED') || error.includes('cancellation_window')) {
+    const cancelError = copy.apiErrors['error.booking.cancellation_window'];
+    return typeof cancelError === 'string' ? cancelError : copy.apiErrors.generic;
+  }
+  return copy.apiErrors.generic;
+}
 
 export function OnboardingFlow() {
   const [gateState, setGateState] = useState<GateState>('checking');
@@ -62,7 +81,7 @@ export function OnboardingFlow() {
     timezone: getBrowserTimezone(),
     locale: initialLocale,
     salonType: '',
-    currency: defaultCurrencyForLocale(initialLocale)
+    currency: defaultCurrencyForLocale(initialLocale),
   });
   const [currencyTouched, setCurrencyTouched] = useState(false);
   const [weeklyHours, setWeeklyHours] = useState<WeeklyHours[]>(defaultWeeklyHours);
@@ -73,14 +92,14 @@ export function OnboardingFlow() {
   const [staff, setStaff] = useState<StaffForm>({
     name: '',
     role: 'owner',
-    sameHours: true
+    sameHours: true,
   });
   const [staffHours, setStaffHours] = useState<WeeklyHours[]>(defaultWeeklyHours);
   const [service, setService] = useState<ServiceForm>({
     name: '',
     durationMinutes: '30',
     priceDisplay: '499',
-    bufferMinutes: 0
+    bufferMinutes: 0,
   });
   const [assignService, setAssignService] = useState(true);
   const [staffErrors, setStaffErrors] = useState<Record<string, string>>({});
@@ -91,6 +110,9 @@ export function OnboardingFlow() {
 
   const [paymentsEnabled, setPaymentsEnabled] = useState(false);
   const [paymentsReady, setPaymentsReady] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
+  const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [stripeError, setStripeError] = useState('');
 
   const [booking, setBooking] = useState<BookingForm>({
     customerName: '',
@@ -100,7 +122,7 @@ export function OnboardingFlow() {
     time: '',
     notes: '',
     sendEmail: true,
-    sendSms: false
+    sendSms: false,
   });
   const [bookingErrors, setBookingErrors] = useState<Record<string, string>>({});
   const [bookingError, setBookingError] = useState('');
@@ -111,37 +133,49 @@ export function OnboardingFlow() {
   const [manageError, setManageError] = useState('');
   const [manageSuccess, setManageSuccess] = useState('');
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
+
+  const handleGateRetry = () => {
+    setGateState('recovering');
+  };
+
+  useEffect(() => {
+    if (gateState !== 'recovering') return;
+    const timer = setTimeout(() => setGateState('checking'), 100);
+    return () => clearTimeout(timer);
+  }, [gateState]);
   const [finishingOnboarding, setFinishingOnboarding] = useState(false);
   const smsAvailable = false;
   const [availabilitySlots, setAvailabilitySlots] = useState<AvailabilitySlot[]>([]);
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState('');
   const copy = getCopy(salon.locale);
+  const locale = resolveLocale(salon.locale);
+  const slotLabelLocale = locale === 'da' ? 'da-DK' : 'en-GB';
 
   const steps: { id: StepId; title: string; hint: string }[] = useMemo(
     () => [
       {
         id: 'salon',
         title: copy.stepper.steps.salon.title,
-        hint: copy.stepper.steps.salon.hint
+        hint: copy.stepper.steps.salon.hint,
       },
       {
         id: 'staff',
         title: copy.stepper.steps.staff.title,
-        hint: copy.stepper.steps.staff.hint
+        hint: copy.stepper.steps.staff.hint,
       },
       {
         id: 'payments',
         title: copy.stepper.steps.payments.title,
-        hint: copy.stepper.steps.payments.hint
+        hint: copy.stepper.steps.payments.hint,
       },
       {
         id: 'cta',
         title: copy.stepper.steps.cta.title,
-        hint: copy.stepper.steps.cta.hint
-      }
+        hint: copy.stepper.steps.cta.hint,
+      },
     ],
-    [copy]
+    [copy],
   );
 
   useEffect(() => {
@@ -159,10 +193,8 @@ export function OnboardingFlow() {
       if (!result.ok) {
         if (result.status === 401 || result.status === 403) {
           setGateState('needs-login');
-        } else if (result.status === 0 || result.status >= 500) {
-          setGateState('error');
         } else {
-          setGateState('needs-onboarding');
+          setGateState('error');
         }
         return;
       }
@@ -170,17 +202,34 @@ export function OnboardingFlow() {
       const nextSalonId = result.data.primarySalonId ?? result.data.user?.primarySalonId ?? null;
       setSalonId(nextSalonId);
       if (result.data.salon) {
-        setSalon((prev) => ({
+        setSalon((prev: SalonForm) => ({
           name: result.data.salon?.name ?? prev.name,
           timezone: result.data.salon?.timezone ?? prev.timezone,
           locale: result.data.salon?.locale ?? prev.locale,
-          salonType: result.data.salon?.salonType ?? prev.salonType,
-          currency: result.data.salon?.currency ?? prev.currency
+          salonType: (result.data.salon?.salonType as SalonType | '') ?? prev.salonType,
+          currency: result.data.salon?.currency ?? prev.currency,
         }));
         setSalonSlug(result.data.salon?.slug ?? null);
+        const hasStripeAccount = Boolean(result.data.salon?.stripeAccountId);
+        const chargesEnabled = Boolean(result.data.salon?.stripeChargesEnabled);
+        const detailsSubmitted = Boolean(result.data.salon?.stripeDetailsSubmitted);
+        setStripeStatus({
+          connected: hasStripeAccount,
+          stripeAccountId: result.data.salon?.stripeAccountId ?? null,
+          detailsSubmitted,
+          chargesEnabled,
+          payoutsEnabled: Boolean(result.data.salon?.stripePayoutsEnabled),
+          onboardingCompletedAt: result.data.salon?.stripeOnboardingCompletedAt ?? null,
+        });
+        if (hasStripeAccount) {
+          setPaymentsEnabled(true);
+          setPaymentsReady(chargesEnabled && detailsSubmitted);
+        }
       }
       if (result.data.salon?.status === 'active') {
         setGateState('has-salon');
+      } else if (!result.data.user?.id) {
+        setGateState('needs-login');
       } else {
         setGateState('needs-onboarding');
       }
@@ -191,12 +240,40 @@ export function OnboardingFlow() {
     };
   }, [gateState]);
 
+  const refreshStripeStatus = useCallback(async () => {
+    setStripeError('');
+    const result = await getStripeConnectStatus();
+    if (!result.ok) {
+      setStripeError(mapApiError(result.error, copy));
+      return;
+    }
+    setStripeStatus(result.data);
+    const ready = result.data.chargesEnabled && result.data.detailsSubmitted;
+    setPaymentsReady(ready);
+    if (result.data.connected) {
+      setPaymentsEnabled(true);
+    }
+  }, [copy]);
+
+  useEffect(() => {
+    if (step !== 'payments') return;
+    let active = true;
+    const refresh = async () => {
+      if (!active) return;
+      await refreshStripeStatus();
+    };
+    refresh();
+    return () => {
+      active = false;
+    };
+  }, [step, refreshStripeStatus]);
+
   useEffect(() => {
     if (step !== 'cta' || onboardingCompleted) return;
     if (!salonId) return;
     setOnboardingCompleted(true);
     trackEvent('onboarding.completed', { salonId, salonType: salon.salonType || undefined }).catch(
-      () => {}
+      () => {},
     );
   }, [step, onboardingCompleted, salonId]);
 
@@ -209,7 +286,7 @@ export function OnboardingFlow() {
     };
   }, []);
 
-  useEffect(() => {
+  const loadAvailability = useCallback(() => {
     if (step !== 'cta' || !serviceId) return;
     let active = true;
     setAvailabilityLoading(true);
@@ -219,12 +296,12 @@ export function OnboardingFlow() {
       staffId: staffId ?? undefined,
       days: 7,
       limit: 20,
-      intervalMinutes: 15
+      intervalMinutes: 15,
     }).then((result) => {
       if (!active) return;
       setAvailabilityLoading(false);
       if (!result.ok) {
-        setAvailabilityError(result.error);
+        setAvailabilityError(mapApiError(result.error, copy));
         setAvailabilitySlots([]);
         return;
       }
@@ -233,7 +310,14 @@ export function OnboardingFlow() {
     return () => {
       active = false;
     };
-  }, [step, serviceId, staffId, salon.timezone]);
+  }, [step, serviceId, staffId]);
+
+  useEffect(() => {
+    const cleanup = loadAvailability();
+    return () => {
+      if (typeof cleanup === 'function') cleanup();
+    };
+  }, [loadAvailability]);
 
   const computedEndTime = useMemo(() => {
     const durationValue = Number(service.durationMinutes);
@@ -242,18 +326,18 @@ export function OnboardingFlow() {
   }, [booking.time, service.durationMinutes, service.bufferMinutes]);
 
   const slotOptions = useMemo(() => {
-    const labelFormatter = new Intl.DateTimeFormat('en-GB', {
+    const labelFormatter = new Intl.DateTimeFormat(slotLabelLocale, {
       timeZone: salon.timezone,
       weekday: 'short',
       day: '2-digit',
       month: 'short',
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false
+      hour12: false,
     });
     return availabilitySlots.map((slot) => ({
       ...slot,
-      label: labelFormatter.format(new Date(slot.startUtc))
+      label: labelFormatter.format(new Date(slot.startUtc)),
     }));
   }, [availabilitySlots, salon.timezone]);
 
@@ -262,13 +346,13 @@ export function OnboardingFlow() {
       timeZone: salon.timezone,
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit'
+      day: '2-digit',
     }).format(new Date(slot.startUtc));
-    const timeValue = new Intl.DateTimeFormat('en-GB', {
+    const timeValue = new Intl.DateTimeFormat(slotLabelLocale, {
       timeZone: salon.timezone,
       hour: '2-digit',
       minute: '2-digit',
-      hour12: false
+      hour12: false,
     }).format(new Date(slot.startUtc));
     setBooking((prev) => ({ ...prev, date: dateValue, time: timeValue }));
     setBookingErrors({});
@@ -281,10 +365,10 @@ export function OnboardingFlow() {
   const updateHours = (
     setter: React.Dispatch<React.SetStateAction<WeeklyHours[]>>,
     targetDay: DayId,
-    patch: Partial<WeeklyHours>
+    patch: Partial<WeeklyHours>,
   ) => {
     setter((prev) =>
-      prev.map((entry) => (entry.day === targetDay ? { ...entry, ...patch } : entry))
+      prev.map((entry) => (entry.day === targetDay ? { ...entry, ...patch } : entry)),
     );
   };
 
@@ -331,7 +415,7 @@ export function OnboardingFlow() {
       setOnboardingStarted(true);
       trackEvent('onboarding.started', {
         salonId,
-        salonType: salon.salonType || undefined
+        salonType: salon.salonType || undefined,
       }).catch(() => {});
     }
     setStep('staff');
@@ -360,13 +444,13 @@ export function OnboardingFlow() {
       }
     }
 
-    const price = toMinorUnits(service.priceDisplay);
+    const price = toMinorUnits(Number(service.priceDisplay));
     const serviceResult = await createService({
       name: service.name.trim(),
       durationMinutes: Number(service.durationMinutes),
       bufferMinutes: service.bufferMinutes,
       price,
-      currency: salon.currency
+      currency: salon.currency,
     });
     if (!serviceResult.ok) {
       setStaffSaving(false);
@@ -387,7 +471,7 @@ export function OnboardingFlow() {
       const inviteResult = await inviteStaff({
         email: staff.email.trim(),
         name: staff.name.trim(),
-        role: staff.role === 'owner' ? 'admin' : (staff.role as 'staff' | 'admin')
+        role: staff.role === 'owner' ? 'admin' : (staff.role as 'staff' | 'admin'),
       });
       if (!inviteResult.ok) {
         console.warn('[Onboarding] Staff created but invitation failed:', inviteResult.error);
@@ -400,6 +484,18 @@ export function OnboardingFlow() {
     setStaffId(staffResult.data.id);
     setServiceId(serviceResult.data.id);
     setStep('payments');
+  };
+
+  const handleStartStripeConnect = async () => {
+    setStripeError('');
+    setStripeConnecting(true);
+    const result = await startStripeConnect();
+    setStripeConnecting(false);
+    if (!result.ok) {
+      setStripeError(mapApiError(result.error, copy));
+      return;
+    }
+    window.location.href = result.data.url;
   };
 
   const handleCreateBooking = async () => {
@@ -427,12 +523,12 @@ export function OnboardingFlow() {
       customer: {
         name: booking.customerName.trim(),
         email: booking.customerEmail || undefined,
-        phone: booking.customerPhone || undefined
-      }
+        phone: booking.customerPhone || undefined,
+      },
     });
     if (!bookingResult.ok) {
       setBookingSaving(false);
-      setBookingError(bookingResult.error);
+      setBookingError(mapApiError(bookingResult.error, copy));
       return;
     }
     setLastBookingId(bookingResult.data.id);
@@ -442,34 +538,34 @@ export function OnboardingFlow() {
     if (paymentsEnabled && paymentsReady) {
       if (!salonSlug) {
         setBookingSaving(false);
-        setBookingError('Salon slug mangler.');
+        setBookingError(copy.errors.bookingSalonSlug);
         return;
       }
       const tokenResult = await createBookingAccessToken(bookingResult.data.id);
       if (!tokenResult.ok) {
         setBookingSaving(false);
-        setBookingError(tokenResult.error);
+        setBookingError(mapApiError(tokenResult.error, copy));
         return;
       }
       const successUrl = buildBookingConfirmationUrl({
         salonSlug,
         bookingId: bookingResult.data.id,
-        token: tokenResult.data.bookingToken
+        token: tokenResult.data.bookingToken,
       });
       const cancelUrl = buildBookingManageUrl({
         salonSlug,
         bookingId: bookingResult.data.id,
-        token: tokenResult.data.bookingToken
+        token: tokenResult.data.bookingToken,
       });
       const checkoutResult = await createCheckout({
         bookingId: bookingResult.data.id,
         successUrl,
-        cancelUrl
+        cancelUrl,
       });
       setBookingSaving(false);
       if (!checkoutResult.ok) {
         setBookingSuccess(copy.cta.success.bookingPending);
-        setBookingError(checkoutResult.error);
+        setBookingError(mapApiError(checkoutResult.error, copy));
         return;
       }
       setCheckoutUrl(checkoutResult.data.checkoutUrl);
@@ -479,7 +575,7 @@ export function OnboardingFlow() {
 
     setBookingSaving(false);
     setBookingSuccess(
-      paymentsEnabled ? copy.cta.success.bookingPending : copy.cta.success.bookingQueued
+      paymentsEnabled ? copy.cta.success.bookingPending : copy.cta.success.bookingQueued,
     );
   };
 
@@ -490,11 +586,11 @@ export function OnboardingFlow() {
     setManageSuccess('');
     const result = await cancelBooking(lastBookingId, {
       reasonKey: 'user.cancelled',
-      note: booking.notes || undefined
+      note: booking.notes || undefined,
     });
     setManageBusy(false);
     if (!result.ok) {
-      setManageError(result.error);
+      setManageError(mapApiError(result.error, copy));
       return;
     }
     setManageSuccess(copy.cta.success.bookingCancelled);
@@ -507,11 +603,11 @@ export function OnboardingFlow() {
     setManageSuccess('');
     const result = await rescheduleBooking(lastBookingId, {
       staffId,
-      startUtc: slot.startUtc
+      startUtc: slot.startUtc,
     });
     setManageBusy(false);
     if (!result.ok) {
-      setManageError(result.error);
+      setManageError(mapApiError(result.error, copy));
       return;
     }
     applySlot(slot);
@@ -525,25 +621,28 @@ export function OnboardingFlow() {
     const result = await activateSalon(salonId);
     if (!result.ok) {
       console.error('[Onboarding] Activation failed:', result.error, 'Status:', result.status);
-      setBookingError(result.error);
+      setBookingError(mapApiError(result.error, copy));
       setFinishingOnboarding(false);
       return;
     }
     console.log('[Onboarding] Salon activated successfully:', result.data);
-    window.location.href = '/console';
+    // Set flag to bypass onboarding check on reload (handles replica lag and Vite HMR)
+    localStorage.setItem('onboardingJustCompleted', 'true');
+    window.location.reload();
   };
 
   if (
     gateState === 'checking' ||
+    gateState === 'recovering' ||
     gateState === 'has-salon' ||
     gateState === 'needs-login' ||
     gateState === 'error'
   ) {
     return (
-      <div className="app">
+      <div>
         <Gate
           state={gateState}
-          onRetry={() => setGateState('checking')}
+          onRetry={handleGateRetry}
           onReviewSettings={() => {
             setStep('salon');
             setGateState('needs-onboarding');
@@ -554,19 +653,19 @@ export function OnboardingFlow() {
   }
 
   return (
-    <div className="app">
-      <div className="console-banner">
+    <Stack gap="md" className="onb-page">
+      <Card variant="outlined" className="onb-warning-card">
         Du skal gennemføre onboarding, før du kan bruge Owner Console.
-      </div>
-      <div className="top-bar">
-        <div className="brand">
-          <div className="brand-mark" />
+      </Card>
+      <Stack direction="row" gap="md" align="center" justify="between">
+        <Stack direction="row" gap="sm" align="center">
+          <div className="onb-avatar-dot" />
           {copy.topBar.brand}
-        </div>
-        <span className="badge">{copy.topBar.badge}</span>
-      </div>
+        </Stack>
+        <Badge variant="default">{copy.topBar.badge}</Badge>
+      </Stack>
 
-      <div className="shell">
+      <Card>
         <Progress steps={steps} activeStep={step} />
 
         <main>
@@ -610,46 +709,89 @@ export function OnboardingFlow() {
               title={copy.payments.title}
               subtitle={copy.payments.body}
             >
-              <label className="toggle">
+              <label className="onb-toggle">
                 <input
                   type="checkbox"
                   checked={paymentsEnabled}
-                  onChange={(event) => setPaymentsEnabled(event.target.checked)}
+                  onChange={(event) => {
+                    const next = event.target.checked;
+                    setPaymentsEnabled(next);
+                    if (!next) {
+                      setPaymentsReady(false);
+                      setStripeError('');
+                    }
+                  }}
                 />
                 {copy.payments.toggle}
               </label>
 
               {paymentsEnabled && (
-                <div className="panel" style={{ marginTop: 16 }}>
-                  <div className="banner">
-                    <div>
-                      <strong>{copy.payments.stripe.title}</strong>
-                      <div>{copy.payments.stripe.body}</div>
-                    </div>
-                    <button
-                      className="btn primary"
-                      type="button"
-                      onClick={() => setPaymentsReady(true)}
-                    >
-                      {paymentsReady ? copy.payments.stripe.connected : copy.payments.stripe.connect}
-                    </button>
-                  </div>
-                  {!paymentsReady && (
-                    <div className="note" style={{ marginTop: 12 }}>
-                      {copy.payments.stripe.note}
-                    </div>
-                  )}
-                </div>
+                <Card variant="outlined" className="onb-stripe-card">
+                  <Stack gap="md">
+                    <Stack direction="row" gap="md" align="center" justify="between">
+                      <div>
+                        <strong>{copy.payments.stripe.title}</strong>
+                        <div className="onb-muted">{copy.payments.stripe.body}</div>
+                      </div>
+                      <Button
+                        variant="primary"
+                        onClick={handleStartStripeConnect}
+                        disabled={stripeConnecting || paymentsReady}
+                      >
+                        {paymentsReady
+                          ? copy.payments.stripe.connected
+                          : copy.payments.stripe.connect}
+                      </Button>
+                    </Stack>
+                    {!paymentsReady && <p className="onb-note">{copy.payments.stripe.note}</p>}
+                    {stripeStatus && (
+                      <div className="onb-muted">
+                        <strong>{copy.payments.statusLabel}</strong>{' '}
+                        {stripeStatus.connected
+                          ? stripeStatus.chargesEnabled && stripeStatus.detailsSubmitted
+                            ? copy.payments.statusConnected
+                            : copy.payments.statusPending
+                          : copy.payments.statusNotConnected}
+                        <div className="onb-spacer-sm">
+                          {copy.payments.chargesLabel}{' '}
+                          {stripeStatus.chargesEnabled
+                            ? copy.payments.enabled
+                            : copy.payments.disabled}
+                        </div>
+                        <div>
+                          {copy.payments.payoutsLabel}{' '}
+                          {stripeStatus.payoutsEnabled
+                            ? copy.payments.enabled
+                            : copy.payments.disabled}
+                        </div>
+                      </div>
+                    )}
+                    {stripeError ? (
+                      <Card variant="outlined" className="onb-error-card onb-card-top-sm">
+                        <Stack gap="sm">
+                          <p className="onb-error">{stripeError}</p>
+                          <Button variant="subtle" size="sm" onClick={refreshStripeStatus}>
+                            {copy.payments.actions.retryStatus}
+                          </Button>
+                        </Stack>
+                      </Card>
+                    ) : null}
+                  </Stack>
+                </Card>
               )}
 
-              <div className="btn-row">
-                <button className="btn ghost" type="button" onClick={() => setStep('staff')}>
+              <Stack direction="row" gap="md" className="onb-actions">
+                <Button variant="ghost" onClick={() => setStep('staff')}>
                   {copy.payments.actions.back}
-                </button>
-                <button className="btn primary" type="button" onClick={() => setStep('cta')}>
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={() => setStep('cta')}
+                  disabled={paymentsEnabled && !paymentsReady}
+                >
                   {copy.payments.actions.continue}
-                </button>
-              </div>
+                </Button>
+              </Stack>
             </StepLayout>
           )}
 
@@ -674,6 +816,9 @@ export function OnboardingFlow() {
               slots={slotOptions}
               slotsLoading={availabilityLoading}
               slotsError={availabilityError}
+              onReloadSlots={() => {
+                loadAvailability();
+              }}
               onPickSlot={applySlot}
               onCancelBooking={handleCancelBooking}
               onReschedule={handleReschedule}
@@ -686,7 +831,7 @@ export function OnboardingFlow() {
             />
           )}
         </main>
-      </div>
-    </div>
+      </Card>
+    </Stack>
   );
 }

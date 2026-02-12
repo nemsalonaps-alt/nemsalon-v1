@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Card, Badge } from '@nemsalon/ui';
 
 type StepLayoutProps = {
   badge?: string;
@@ -9,11 +10,11 @@ type StepLayoutProps = {
 
 export function StepLayout({ badge, title, subtitle, children }: StepLayoutProps) {
   return (
-    <section className="panel">
-      {badge && <span className="badge">{badge}</span>}
+    <Card>
+      {badge && <Badge variant="default">{badge}</Badge>}
       <h1>{title}</h1>
       {subtitle && <p>{subtitle}</p>}
       {children}
-    </section>
+    </Card>
   );
 }

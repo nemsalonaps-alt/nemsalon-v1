@@ -1,0 +1,34 @@
+.auth-card {
+  max-width: 400px;
+  margin: 40px auto;
+}
+
+.auth-error-card {
+  margin-top: 16px;
+  border-color: var(--error);
+}
+
+.auth-error-text {
+  color: var(--error);
+  margin: 0;
+}
+
+.auth-success-card {
+  margin-top: 16px;
+  border-color: var(--primary);
+  background: var(--primary-100);
+}
+
+.auth-success-text {
+  color: var(--primary);
+  margin: 0;
+}
+
+.auth-actions {
+  margin-top: 24px;
+}
+
+.auth-switch {
+  margin-top: 16px;
+  text-align: center;
+}

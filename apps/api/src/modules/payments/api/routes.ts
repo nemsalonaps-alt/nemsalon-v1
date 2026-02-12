@@ -19,7 +19,58 @@ const refundBodySchema = z.object({
   reason: z.string().min(1).optional()
 });
 
+const connectCallbackSchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+  error: z.string().optional(),
+  error_description: z.string().optional()
+});
+
+function appendQuery(url: string, key: string, value: string) {
+  try {
+    const target = new URL(url);
+    target.searchParams.set(key, value);
+    return target.toString();
+  } catch {
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+  }
+}
+
 export function registerPaymentsRoutes(app: FastifyInstance) {
+  app.post('/v1/payments/connect/start', async (request, reply) => {
+    const { user } = await authService.resolveAuthUser(request);
+    const salonId = await authService.requirePrimarySalonId(request);
+    await authService.requireRole(request, salonId, 'owner');
+    const result = await paymentsService.startStripeConnect({ salonId, userId: user.id });
+    reply.code(200).send(result);
+  });
+
+  app.get('/v1/payments/connect/status', async (request, reply) => {
+    const salonId = await authService.requirePrimarySalonId(request);
+    await authService.requireRole(request, salonId, 'owner');
+    const status = await paymentsService.getStripeConnectStatus({ salonId });
+    reply.code(200).send(status);
+  });
+
+  app.get('/v1/payments/connect/callback', async (request, reply) => {
+    const query = connectCallbackSchema.parse(request.query);
+    try {
+      await paymentsService.handleStripeConnectCallback({
+        code: query.code,
+        state: query.state,
+        error: query.error,
+        errorDescription: query.error_description
+      });
+      const successUrl = env.STRIPE_CONNECT_SUCCESS_URL ?? env.PUBLIC_APP_URL ?? '/';
+      reply.redirect(appendQuery(successUrl, 'stripe', 'success'));
+    } catch (error) {
+      const failureUrl = env.STRIPE_CONNECT_FAILURE_URL ?? env.PUBLIC_APP_URL ?? '/';
+      const message = error instanceof Error ? error.message : 'Stripe connect failed';
+      reply.redirect(appendQuery(failureUrl, 'stripe', message));
+    }
+  });
+
   app.post(
     '/v1/bookings/:bookingId/checkout',
     { config: { rateLimit: { max: 30, timeWindow: 60_000 } } },

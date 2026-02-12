@@ -1,4 +1,3 @@
-import { randomBytes, createHash } from 'crypto';
 import { httpError } from '../../../server/http-error.js';
 import type { Booking } from '../../bookings/domain/bookings-domain.js';
 import type { Salon } from '../../salons/domain/salons-domain.js';
@@ -13,13 +12,13 @@ import { getStaffIdsForService } from '../../staff/repo/staff-services-repo.js';
 import { paymentsService } from '../../payments/service/payments-service.js';
 import { createEvent } from '../../events/repo/events-repo.js';
 import { contentService } from '../../content/service/content-service.js';
+import { createBookingAccessToken, hashBookingToken } from '../../../shared/booking-access.js';
 import {
-  createBookingToken,
   getBookingTokenByHash,
   touchBookingToken
 } from '../repo/booking-token-repo.js';
+import { listPaymentsForBookingIds } from '../../payments/repo/payments-repo.js';
 
-const TOKEN_TTL_DAYS = 30;
 const DEFAULT_INTERVAL = 15;
 
 export type PublicSalon = Pick<Salon, 'id' | 'name' | 'slug' | 'timezone' | 'locale' | 'currency' | 'cancellationWindowMinutes' | 'status' | 'phone' | 'email' | 'addressLine1' | 'addressLine2' | 'city' | 'postalCode' | 'country'>;
@@ -198,8 +197,7 @@ export const publicBookingService = {
           }
     });
 
-    const { token, hash, expiresAt } = buildToken();
-    await createBookingToken({ bookingId: booking.id, tokenHash: hash, expiresAt });
+    const { token, expiresAt } = await createBookingAccessToken(booking.id);
 
     await createEvent({
       eventKey: 'booking.public_created',
@@ -219,8 +217,7 @@ export const publicBookingService = {
 
   async createAccessTokenForBooking(input: { bookingId: string }) {
     const booking = await contentService.getBooking(input.bookingId);
-    const { token, hash, expiresAt } = buildToken();
-    await createBookingToken({ bookingId: booking.id, tokenHash: hash, expiresAt });
+    const { token, expiresAt } = await createBookingAccessToken(booking.id);
     return { bookingToken: token, expiresAt };
   },
 
@@ -239,7 +236,7 @@ export const publicBookingService = {
     if (booking.status !== 'pending') {
       throw httpError(409, 'BOOKING_NOT_PENDING', 'Booking is not in a payable state.');
     }
-    const idempotencyKey = `public:${booking.id}:${hashToken(input.token).slice(0, 12)}`;
+    const idempotencyKey = `public:${booking.id}:${hashBookingToken(input.token).slice(0, 12)}`;
     const result = await paymentsService.createCheckoutForBooking({
       bookingId: booking.id,
       successUrl: input.successUrl,
@@ -309,19 +306,8 @@ export const publicBookingService = {
   }
 };
 
-function buildToken() {
-  const token = randomBytes(32).toString('base64url');
-  const hash = hashToken(token);
-  const expiresAt = TOKEN_TTL_DAYS > 0 ? new Date(Date.now() + TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString() : null;
-  return { token, hash, expiresAt };
-}
-
-function hashToken(token: string) {
-  return createHash('sha256').update(token).digest('hex');
-}
-
 async function resolveBookingByToken(bookingId: string, token: string) {
-  const hash = hashToken(token);
+  const hash = hashBookingToken(token);
   const tokenRecord = await getBookingTokenByHash(hash);
   if (!tokenRecord) {
     throw httpError(401, 'BOOKING_TOKEN_INVALID', 'Invalid booking token.');
@@ -345,11 +331,13 @@ async function resolveBookingByToken(bookingId: string, token: string) {
 }
 
 async function hydratePublicBooking(booking: Booking, salon: Salon): Promise<PublicBookingSummary> {
-  const [service, staff, customer] = await Promise.all([
+  const [service, staff, customer, payments] = await Promise.all([
     getServiceById(booking.serviceId),
     getStaffById(booking.staffId),
-    getCustomerById(booking.customerId)
+    getCustomerById(booking.customerId),
+    listPaymentsForBookingIds([booking.id])
   ]);
+  const payment = payments[0];
   return {
     ...booking,
     customerName: customer?.name ?? null,
@@ -362,8 +350,8 @@ async function hydratePublicBooking(booking: Booking, salon: Salon): Promise<Pub
     salonLocale: salon.locale ?? 'da-DK',
     salonTimezone: salon.timezone ?? 'Europe/Copenhagen',
     salonCancellationWindowMinutes: salon.cancellationWindowMinutes ?? 0,
-    paymentStatus: (booking as PublicBookingSummary).paymentStatus ?? null,
-    paymentId: (booking as PublicBookingSummary).paymentId ?? null,
+    paymentStatus: payment?.status ?? null,
+    paymentId: payment?.id ?? null,
     salonPhone: salon.phone ?? null,
     salonEmail: salon.email ?? null,
     salonAddressLine1: salon.addressLine1 ?? null,

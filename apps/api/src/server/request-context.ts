@@ -5,6 +5,7 @@ type RequestContext = {
   userId?: string;
   salonId?: string;
   role?: Membership['role'];
+  impersonatorId?: string;
 };
 
 const contextKey = Symbol('requestContext');
@@ -18,7 +19,10 @@ export function getRequestContext(request: FastifyRequest): RequestContext {
   return getContextStore(request) ?? {};
 }
 
-export function setRequestContext(request: FastifyRequest, updates: RequestContext): RequestContext {
+export function setRequestContext(
+  request: FastifyRequest,
+  updates: RequestContext,
+): RequestContext {
   const store = request as FastifyRequest & { [contextKey]?: RequestContext };
   const current = getContextStore(request) ?? {};
   store[contextKey] = { ...current, ...updates };

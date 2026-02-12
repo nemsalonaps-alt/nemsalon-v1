@@ -3,9 +3,8 @@ import { randomUUID } from 'crypto';
 import { buildApp } from '../../src/server/build-app.ts';
 import { getSupabaseClient } from '../../src/server/db.ts';
 
-const allowIntegration = process.env.ALLOW_INTEGRATION_TESTS === 'true';
-const hasSupabase = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-const itIfSupabase = allowIntegration && hasSupabase ? test : test.skip;
+// Always run tests (setup.ts handles env loading)
+const itIfSupabase = test;
 
 type SeedResult = {
   userId: string;
@@ -269,6 +268,150 @@ describe('booking creation', () => {
       expect(response.statusCode).toBe(400);
       const body = response.json() as { message?: string };
       expect(body.message).toBe('error.booking.invalid_time_alignment');
+    } finally {
+      await cleanup(seed);
+    }
+  });
+
+  itIfSupabase('requires a customer or customerId', async () => {
+    const seed = await seedBase();
+    const startUtc = '2025-01-06T09:00:00.000Z';
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc
+        }
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { code?: string };
+      expect(body.code).toBe('VALIDATION_ERROR');
+    } finally {
+      await cleanup(seed);
+    }
+  });
+
+  itIfSupabase('rejects duration mismatch when end time provided', async () => {
+    const seed = await seedBase();
+    const startUtc = '2025-01-06T10:00:00.000Z';
+    const endUtc = '2025-01-06T10:15:00.000Z';
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          endUtc,
+          customerId: seed.customerId
+        }
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { message?: string };
+      expect(body.message).toBe('error.booking.duration_mismatch');
+    } finally {
+      await cleanup(seed);
+    }
+  });
+
+  itIfSupabase('rejects booking outside business hours', async () => {
+    const seed = await seedBase();
+    const startUtc = '2025-01-06T22:00:00.000Z';
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customerId: seed.customerId
+        }
+      });
+      expect(response.statusCode).toBe(400);
+      const body = response.json() as { message?: string };
+      expect(body.message).toBe('error.booking.outside_business_hours');
+    } finally {
+      await cleanup(seed);
+    }
+  });
+
+  itIfSupabase('prevents staff role from creating bookings', async () => {
+    const seed = await seedBase();
+    const supabase = getSupabaseClient();
+    const staffEmail = `staff+${randomUUID()}@example.com`;
+    const staffPassword = 'TestPass123!';
+    const { data: staffAuth, error } = await supabase.auth.admin.createUser({
+      email: staffEmail,
+      password: staffPassword,
+      email_confirm: true
+    });
+    if (error || !staffAuth.user) {
+      throw error ?? new Error('Failed to create staff auth user');
+    }
+
+    await supabase.from('users').insert({
+      id: staffAuth.user.id,
+      email: staffEmail,
+      primary_salon_id: seed.salonId
+    });
+    await supabase.from('memberships').insert({
+      salon_id: seed.salonId,
+      user_id: staffAuth.user.id,
+      role: 'staff',
+      active: true
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': staffAuth.user.id },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc: '2025-01-06T11:00:00.000Z',
+          customerId: seed.customerId
+        }
+      });
+      expect(response.statusCode).toBe(403);
+    } finally {
+      await supabase.from('memberships').delete().eq('user_id', staffAuth.user.id);
+      await supabase.from('users').delete().eq('id', staffAuth.user.id);
+      await supabase.auth.admin.deleteUser(staffAuth.user.id);
+      await cleanup(seed);
+    }
+  });
+
+  itIfSupabase('creates booking with inline customer payload', async () => {
+    const seed = await seedBase();
+    const startUtc = '2025-01-06T13:00:00.000Z';
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/v1/bookings',
+        headers: { 'x-user-id': seed.userId },
+        payload: {
+          serviceId: seed.serviceId,
+          staffId: seed.staffId,
+          startUtc,
+          customer: {
+            name: 'Inline Customer',
+            email: 'inline@example.com',
+            phone: '+4511122233'
+          }
+        }
+      });
+      expect(response.statusCode).toBe(201);
+      const body = response.json() as { customerId?: string | null };
+      expect(body.customerId).toBeTruthy();
     } finally {
       await cleanup(seed);
     }

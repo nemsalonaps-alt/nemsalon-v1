@@ -51,7 +51,7 @@ export function ConfirmDialog({
               className="textarea"
               rows={3}
               value={reason}
-              onChange={(event) => setReason((event.target as HTMLTextAreaElement).value)}
+              onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) => setReason(event.target.value)}
               placeholder={reasonPlaceholder}
             />
           </label>

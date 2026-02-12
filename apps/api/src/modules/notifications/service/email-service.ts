@@ -1,15 +1,18 @@
+import { env } from '../../../config/env.js';
+import { providers } from '../../../config/providers.js';
+
 export interface EmailService {
   sendStaffInvite(input: {
     email: string;
     name: string;
-    inviteToken: string;
     salonName: string;
+    inviteUrl: string;
   }): Promise<void>;
   
   sendCustomerInvite(input: {
     email: string;
     salonName: string;
-    inviteToken: string;
+    inviteUrl: string;
   }): Promise<void>;
 }
 
@@ -18,11 +21,9 @@ class ConsoleEmailService implements EmailService {
   async sendStaffInvite(input: {
     email: string;
     name: string;
-    inviteToken: string;
     salonName: string;
+    inviteUrl: string;
   }): Promise<void> {
-    const setupUrl = `${this.getBaseUrl()}/staff/setup-pin?token=${input.inviteToken}`;
-    
     console.log('📧 STAFF INVITE EMAIL');
     console.log('To:', input.email);
     console.log('Subject:', `Invitation til ${input.salonName}`);
@@ -31,8 +32,8 @@ class ConsoleEmailService implements EmailService {
 
 Du er blevet inviteret til at deltage i ${input.salonName}.
 
-Klik på linket for at aktivere din konto og vælge din pinkode:
-${setupUrl}
+Klik på linket for at aktivere din konto:
+${input.inviteUrl}
 
 Linket udløber om 7 dage.
 
@@ -44,10 +45,8 @@ ${input.salonName}`);
   async sendCustomerInvite(input: {
     email: string;
     salonName: string;
-    inviteToken: string;
+    inviteUrl: string;
   }): Promise<void> {
-    const registerUrl = `${this.getBaseUrl()}/register?token=${input.inviteToken}`;
-    
     console.log('📧 CUSTOMER INVITE EMAIL');
     console.log('To:', input.email);
     console.log('Subject:', `Invitation fra ${input.salonName}`);
@@ -57,7 +56,7 @@ ${input.salonName}`);
 ${input.salonName} har inviteret dig til at oprette en kundekonto.
 
 Klik på linket for at registrere dig:
-${registerUrl}
+${input.inviteUrl}
 
 Linket udløber om 7 dage.
 
@@ -65,11 +64,75 @@ Med venlig hilsen,
 ${input.salonName}`);
     console.log('---');
   }
-  
-  private getBaseUrl(): string {
-    return process.env.WEB_URL || 'http://localhost:5173';
+}
+
+class PostmarkEmailService implements EmailService {
+  private async sendEmail(input: { to: string; subject: string; text: string }) {
+    if (!env.POSTMARK_SERVER_TOKEN || !env.POSTMARK_FROM) {
+      throw new Error('POSTMARK_* env missing.');
+    }
+    const response = await fetch('https://api.postmarkapp.com/email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Postmark-Server-Token': env.POSTMARK_SERVER_TOKEN
+      },
+      body: JSON.stringify({
+        From: env.POSTMARK_FROM,
+        To: input.to,
+        Subject: input.subject,
+        TextBody: input.text
+      })
+    });
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Postmark failed: ${response.status} ${text.slice(0, 120)}`);
+    }
+  }
+
+  async sendStaffInvite(input: {
+    email: string;
+    name: string;
+    salonName: string;
+    inviteUrl: string;
+  }): Promise<void> {
+    const subject = `Invitation til ${input.salonName}`;
+    const text = `Hej ${input.name},
+
+Du er blevet inviteret til at deltage i ${input.salonName}.
+
+Klik på linket for at aktivere din konto:
+${input.inviteUrl}
+
+Linket udløber om 7 dage.
+
+Med venlig hilsen,
+${input.salonName}`;
+    await this.sendEmail({ to: input.email, subject, text });
+  }
+
+  async sendCustomerInvite(input: {
+    email: string;
+    salonName: string;
+    inviteUrl: string;
+  }): Promise<void> {
+    const subject = `Invitation fra ${input.salonName}`;
+    const text = `Hej,
+
+${input.salonName} har inviteret dig til at oprette en kundekonto.
+
+Klik på linket for at registrere dig:
+${input.inviteUrl}
+
+Linket udløber om 7 dage.
+
+Med venlig hilsen,
+${input.salonName}`;
+    await this.sendEmail({ to: input.email, subject, text });
   }
 }
 
-// TODO: Implement with actual email provider (SendGrid, AWS SES, etc.)
-export const emailService: EmailService = new ConsoleEmailService();
+export const emailService: EmailService =
+  providers.notifications.email.provider === 'postmark'
+    ? new PostmarkEmailService()
+    : new ConsoleEmailService();

@@ -17,8 +17,8 @@ export type Payment = {
   status: PaymentStatus;
   amount: number;
   currency: string;
-  providerReference?: string | null;
-  providerIntentId?: string | null;
+  sessionId?: string | null;
+  paymentIntentId?: string | null;
   providerEventId?: string | null;
   idempotencyKey?: string | null;
 };

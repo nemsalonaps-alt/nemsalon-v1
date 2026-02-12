@@ -9,6 +9,8 @@ export type BookingConfirmationPayload = {
   customerPhone?: string | null;
   startTime: string;
   endTime: string;
+  manageUrl?: string | null;
+  salonName?: string | null;
 };
 
 export type BookingCancellationPayload = {
@@ -21,6 +23,8 @@ export type BookingCancellationPayload = {
   endTime: string;
   reasonKey?: string;
   note?: string;
+  manageUrl?: string | null;
+  salonName?: string | null;
 };
 
 export const notificationsService = {
@@ -29,7 +33,9 @@ export const notificationsService = {
       bookingId: payload.bookingId,
       customerName: payload.customerName,
       startTime: payload.startTime,
-      endTime: payload.endTime
+      endTime: payload.endTime,
+      manageUrl: payload.manageUrl ?? null,
+      salonName: payload.salonName ?? null
     };
 
     if (payload.customerEmail) {
@@ -65,7 +71,9 @@ export const notificationsService = {
       startTime: payload.startTime,
       endTime: payload.endTime,
       reasonKey: payload.reasonKey ?? null,
-      note: payload.note ?? null
+      note: payload.note ?? null,
+      manageUrl: payload.manageUrl ?? null,
+      salonName: payload.salonName ?? null
     };
 
     if (payload.customerEmail) {
