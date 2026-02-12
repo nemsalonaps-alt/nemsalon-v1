@@ -26,6 +26,7 @@ export function OwnerConsole({ initialMe, skipGate }: OwnerConsoleProps) {
     gateState,
     setGateState,
     me,
+    salonId,
     statusMessage,
     confirmState,
     closeConfirm,
@@ -403,6 +404,7 @@ export function OwnerConsole({ initialMe, skipGate }: OwnerConsoleProps) {
             stripeStatusLoading={stripeStatusLoading}
             onStartStripeConnect={handleStartStripeConnect}
             copy={copy}
+            salonId={salonId}
           />
         );
 

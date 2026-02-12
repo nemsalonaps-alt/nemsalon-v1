@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { formatPrice } from '@nemsalon/shared';
 import { getStoredLocale, resolveLocale, type CopyType } from '../../../../i18n';
 import type { BookingSummary, Payment } from '../../types';
 import type { StripeConnectStatus } from '../../api';
 import { Button, Card, Stack, StatCard, Badge } from '@nemsalon/ui';
 import { FeatureState } from '../../../../components/FeatureState';
+import { PaymentDashboard } from '../../../../features/payments/components/PaymentDashboard';
 import '../../console.css';
 
 interface MoneyTabProps {
@@ -14,6 +15,7 @@ interface MoneyTabProps {
   stripeStatusLoading: boolean;
   onStartStripeConnect: () => void;
   copy: CopyType;
+  salonId?: string;
 }
 
 export function MoneyTab({
@@ -23,7 +25,9 @@ export function MoneyTab({
   stripeStatusLoading,
   onStartStripeConnect,
   copy,
+  salonId,
 }: MoneyTabProps) {
+  const [showAdvancedPayments, setShowAdvancedPayments] = useState(false);
   const m = copy.console.money;
   const locale = resolveLocale(getStoredLocale());
   const timeLocale = locale === 'da' ? 'da-DK' : 'en-US';
@@ -262,6 +266,32 @@ export function MoneyTab({
               </div>
             </Stack>
           </Card>
+        )}
+
+        {/* Advanced Payment Dashboard */}
+        {salonId && (
+          <div className="dash-section">
+            <Stack direction="row" gap="md" align="center" justify="between">
+              <div>
+                <h3>Avanceret Betalingsoversigt</h3>
+                <p className="settings-muted">
+                  Detaljeret oversigt over betalinger, refunderinger og analytics
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => setShowAdvancedPayments(!showAdvancedPayments)}
+              >
+                {showAdvancedPayments ? 'Skjul' : 'Vis'} Avanceret
+              </Button>
+            </Stack>
+
+            {showAdvancedPayments && (
+              <div className="mt-4">
+                <PaymentDashboard salonId={salonId} />
+              </div>
+            )}
+          </div>
         )}
       </Stack>
     </Card>
